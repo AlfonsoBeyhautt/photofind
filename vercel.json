@@ -6,19 +6,12 @@
     "api/index.ts": {
       "maxDuration": 60,
       "memory": 1024,
-      "includeFiles": [
-        "api/bundle/**",
-        "node_modules/sharp/**",
-        "node_modules/@img/**"
-      ]
+      "includeFiles": "{api/bundle/**,node_modules/sharp/**,node_modules/@img/**}"
     },
     "api/debug/health.ts": {
       "maxDuration": 15,
       "memory": 256,
-      "includeFiles": [
-        "node_modules/sharp/**",
-        "node_modules/@img/**"
-      ]
+      "includeFiles": "{node_modules/sharp/**,node_modules/@img/**}"
     }
   },
   "rewrites": [
