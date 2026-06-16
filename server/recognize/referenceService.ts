@@ -1,4 +1,3 @@
-import sharp from 'sharp'
 import type { DetectedFace, FaceBox, ReferenceQualityTier, ReferenceSource } from '../../src/types/recognition'
 import { REFERENCE_MAX_DIMENSION } from './config'
 import {
@@ -14,6 +13,11 @@ import {
 } from './referenceStore'
 
 const MAX_INPUT_BYTES = 15 * 1024 * 1024
+
+async function loadSharp() {
+  const mod = await import('sharp')
+  return mod.default
+}
 
 export type ReferenceValidationErrorCode =
   | 'REFERENCE_NO_FACE'
@@ -171,6 +175,7 @@ export async function normalizeReferenceBytes(
   mimeType?: string,
 ): Promise<{ buffer: Buffer; contentType: string }> {
   try {
+    const sharp = await loadSharp()
     const pipeline = sharp(input, { failOn: 'none' }).rotate()
     const meta = await pipeline.metadata()
     const resizeNeeded = (meta.width ?? 0) > REFERENCE_MAX_DIMENSION || (meta.height ?? 0) > REFERENCE_MAX_DIMENSION

@@ -1,4 +1,36 @@
-import { getSupabaseAdmin } from './client'
+import { tryGetSupabaseAdmin, SupabaseConfigError } from './client'
+
+function logTableError(
+  table: string,
+  context: string,
+  error: { message?: string; code?: string; details?: string; hint?: string },
+): void {
+  console.error(`[PhotoFind:Supabase] ${context}`, {
+    table,
+    code: error.code,
+    message: error.message,
+    hint: error.hint,
+    details: error.details,
+  })
+}
+
+function isMissingTableError(error: { message?: string; code?: string }): boolean {
+  return (
+    error.code === 'PGRST205'
+    || error.code === '42P01'
+    || Boolean(error.message?.includes('does not exist'))
+    || Boolean(error.message?.includes('Could not find the table'))
+  )
+}
+
+function requireAdmin() {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) {
+    console.error('[PhotoFind:Server] supabase_init_error', admin.error)
+    throw new SupabaseConfigError(admin.error)
+  }
+  return admin.client
+}
 
 export interface SearchHistoryRow {
   id: string
@@ -56,7 +88,7 @@ export async function recordSearch(
     totalPhotos?: number | null
   },
 ): Promise<SearchHistoryItem> {
-  const supabase = getSupabaseAdmin()
+  const supabase = requireAdmin()
   const { data: row, error } = await supabase
     .from('search_history')
     .insert({
@@ -72,7 +104,10 @@ export async function recordSearch(
     .single()
 
   if (error || !row) {
-    console.error('[PhotoFind:Supabase] recordSearch:', error?.message)
+    logTableError('search_history', 'recordSearch', error ?? { message: 'no row returned' })
+    if (error && isMissingTableError(error)) {
+      throw new Error('TABLE_SEARCH_HISTORY_MISSING')
+    }
     throw new Error('SEARCH_RECORD_FAILED')
   }
 
@@ -80,7 +115,7 @@ export async function recordSearch(
 }
 
 export async function listRecentSearches(userId: string, limit = 20): Promise<SearchHistoryItem[]> {
-  const supabase = getSupabaseAdmin()
+  const supabase = requireAdmin()
   const { data, error } = await supabase
     .from('search_history')
     .select('*')
@@ -89,7 +124,10 @@ export async function listRecentSearches(userId: string, limit = 20): Promise<Se
     .limit(limit)
 
   if (error) {
-    console.error('[PhotoFind:Supabase] listRecentSearches:', error.message)
+    logTableError('search_history', 'listRecentSearches', error)
+    if (isMissingTableError(error)) {
+      throw new Error('TABLE_SEARCH_HISTORY_MISSING')
+    }
     throw new Error('SEARCH_FETCH_FAILED')
   }
 

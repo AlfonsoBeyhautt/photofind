@@ -27,6 +27,7 @@ import {
 import { fetchWeTransferAlbum } from './wetransferService'
 import { handleCompareAlbumRequest } from './recognize/compareSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
+import { handleHealthRequest } from './debug/healthHandler'
 import {
   handleDeleteFacialProfileRequest,
   handleDashboardRequest,
@@ -61,6 +62,13 @@ export function driveApiPlugin(): Plugin {
       logApiKeyStatus(root)
 
       server.middlewares.use(async (req, res, next) => {
+        if (req.url?.startsWith('/api/debug/health') && req.method === 'GET') {
+          const url = new URL(req.url, 'http://localhost')
+          const deep = url.searchParams.get('deep') === '1' || url.searchParams.get('deep') === 'true'
+          await handleHealthRequest(req, res, { deep })
+          return
+        }
+
         if (req.url?.startsWith('/api/auth/')) {
           try {
             const body = req.method === 'GET' || req.method === 'DELETE' ? '' : await readBody(req)

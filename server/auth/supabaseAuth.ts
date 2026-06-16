@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 import type { User } from '@supabase/supabase-js'
-import { getSupabaseAdmin } from '../supabase/client'
+import { tryGetSupabaseAdmin, SupabaseConfigError } from '../supabase/client'
 import type { PublicUser } from './types'
 
 function getBearerToken(req: IncomingMessage): string | null {
@@ -25,8 +25,18 @@ export async function getAuthenticatedUser(req: IncomingMessage): Promise<Public
   const token = getBearerToken(req)
   if (!token) return null
 
-  const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token)
-  if (error || !user) return null
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) {
+    console.error('[PhotoFind:Server] auth_getUser_config_error', admin.error)
+    throw new SupabaseConfigError(admin.error)
+  }
+
+  const { data: { user }, error } = await admin.client.auth.getUser(token)
+  if (error) {
+    console.error('[PhotoFind:Server] auth_getUser_error', { message: error.message, status: error.status })
+    return null
+  }
+  if (!user) return null
   return toPublicUser(user)
 }
 

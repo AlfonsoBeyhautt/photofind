@@ -26,6 +26,8 @@ import {
   parseOneDriveThumbnailPath,
 } from './onedriveThumbnailHandler'
 import { getGoogleDriveApiKey } from './env'
+import { logStartupConfig } from './config/serverHealth'
+import { handleHealthRequest } from './debug/healthHandler'
 import { handleCompareAlbumRequest } from './recognize/compareSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import {
@@ -48,6 +50,9 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions = {}): Express {
   const { serveStatic = true } = options
   const app = express()
+
+  logStartupConfig()
+
   app.use((req, _res, next) => {
     if (req.url?.startsWith('/api')) {
       console.log('[PhotoFind:Backend] request', { method: req.method, url: req.url })
@@ -56,6 +61,11 @@ export function createApp(options: CreateAppOptions = {}): Express {
   })
 
   app.use(express.json({ limit: '15mb' }))
+
+  app.get('/api/debug/health', async (req, res) => {
+    const deep = req.query.deep === '1' || req.query.deep === 'true'
+    await handleHealthRequest(req, res, { deep })
+  })
 
   app.get('/api/drive/thumbnail/:fileId', async (req, res) => {
     await handleThumbnailRequest(req, res, req.params.fileId, req.originalUrl)
@@ -193,10 +203,12 @@ export function createApp(options: CreateAppOptions = {}): Express {
       const body = JSON.stringify(req.body ?? {})
       await handleValidateReferenceRequest(req, res, body)
     } catch (err) {
-      console.error('[PhotoFind:Backend] validate_reference_unhandled', err instanceof Error ? err.message : err)
+      const message = err instanceof Error ? err.message : String(err)
+      const stack = err instanceof Error ? err.stack : undefined
+      console.error('[PhotoFind:Server] validate_reference_error', { stage: 'express_wrapper', message, stack })
       res.status(500).json({
         ok: false,
-        error: { code: 'REFERENCE_VALIDATION_FAILED', message: 'No pudimos validar la foto de referencia.' },
+        error: { code: 'REFERENCE_VALIDATION_FAILED', message },
       })
     }
   })
@@ -215,7 +227,17 @@ export function createApp(options: CreateAppOptions = {}): Express {
   })
 
   app.get('/api/auth/me', async (req, res) => {
-    await handleMeRequest(req, res)
+    try {
+      await handleMeRequest(req, res)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const stack = err instanceof Error ? err.stack : undefined
+      console.error('[PhotoFind:Server] auth_me_error', { stage: 'express_wrapper', message, stack })
+      res.status(500).json({
+        ok: false,
+        error: { code: 'AUTH_ME_FAILED', message },
+      })
+    }
   })
 
   app.get('/api/auth/dashboard', async (req, res) => {

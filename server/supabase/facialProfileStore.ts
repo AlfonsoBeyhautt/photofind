@@ -3,7 +3,39 @@ import {
   FACIAL_PROFILES_BUCKET,
   facialProfileStoragePath,
 } from './config'
-import { getSupabaseAdmin } from './client'
+import { tryGetSupabaseAdmin, SupabaseConfigError } from './client'
+
+function logTableError(
+  table: string,
+  context: string,
+  error: { message?: string; code?: string; details?: string; hint?: string },
+): void {
+  console.error(`[PhotoFind:Supabase] ${context}`, {
+    table,
+    code: error.code,
+    message: error.message,
+    hint: error.hint,
+    details: error.details,
+  })
+}
+
+function isMissingTableError(error: { message?: string; code?: string }): boolean {
+  return (
+    error.code === 'PGRST205'
+    || error.code === '42P01'
+    || Boolean(error.message?.includes('does not exist'))
+    || Boolean(error.message?.includes('Could not find the table'))
+  )
+}
+
+function requireAdmin() {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) {
+    console.error('[PhotoFind:Server] supabase_init_error', admin.error)
+    throw new SupabaseConfigError(admin.error)
+  }
+  return admin.client
+}
 
 export interface FacialProfileMeta {
   hasProfile: true
@@ -43,7 +75,7 @@ function rowToMeta(row: FacialProfileRow): FacialProfileMeta {
 }
 
 export async function getFacialProfile(userId: string): Promise<FacialProfileRow | null> {
-  const supabase = getSupabaseAdmin()
+  const supabase = requireAdmin()
   const { data, error } = await supabase
     .from('facial_profiles')
     .select('*')
@@ -51,8 +83,11 @@ export async function getFacialProfile(userId: string): Promise<FacialProfileRow
     .maybeSingle()
 
   if (error) {
-    console.error('[PhotoFind:Supabase] getFacialProfile:', error.message)
-    throw new Error('PROFILE_FETCH_FAILED')
+    logTableError('facial_profiles', 'getFacialProfile', error)
+    if (isMissingTableError(error)) {
+      throw new Error('TABLE_FACIAL_PROFILES_MISSING')
+    }
+    throw new Error(`PROFILE_FETCH_FAILED: ${error.message}`)
   }
   return data as FacialProfileRow | null
 }
@@ -74,7 +109,7 @@ export async function saveFacialProfile(
     qualityWarning?: string
   },
 ): Promise<FacialProfileMeta> {
-  const supabase = getSupabaseAdmin()
+  const supabase = requireAdmin()
   const storagePath = facialProfileStoragePath(userId)
 
   console.log('[PhotoFind:Supabase] profile_upload_start', { userId, storagePath, bytes: data.buffer.length })
@@ -108,7 +143,10 @@ export async function saveFacialProfile(
     .single()
 
   if (dbError || !saved) {
-    console.error('[PhotoFind:Supabase] profile_metadata_error', dbError?.message)
+    logTableError('facial_profiles', 'profile_metadata_error', dbError ?? { message: 'no row returned' })
+    if (dbError && isMissingTableError(dbError)) {
+      throw new Error('TABLE_FACIAL_PROFILES_MISSING')
+    }
     throw new Error('SUPABASE_PROFILE_METADATA_FAILED')
   }
 
@@ -116,7 +154,7 @@ export async function saveFacialProfile(
 }
 
 export async function deleteFacialProfile(userId: string): Promise<boolean> {
-  const supabase = getSupabaseAdmin()
+  const supabase = requireAdmin()
   const existing = await getFacialProfile(userId)
   if (!existing) return false
 
@@ -145,7 +183,7 @@ export async function readFacialProfileImage(userId: string): Promise<Buffer | n
   const profile = await getFacialProfile(userId)
   if (!profile) return null
 
-  const supabase = getSupabaseAdmin()
+  const supabase = requireAdmin()
   const { data, error } = await supabase.storage
     .from(FACIAL_PROFILES_BUCKET)
     .download(profile.storage_path)
