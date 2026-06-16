@@ -11,6 +11,7 @@ import { PremiumSection } from '../components/flow/PremiumSection'
 import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { recordSearch } from '../lib/auth/authClient'
+import { resetAllProcessingRuns } from '../lib/processing/processingRunGuard'
 import type { RecognitionSearchResult } from '../types/recognition'
 
 type FlowStep = 'hero' | 'person' | 'processing' | 'results'
@@ -63,12 +64,14 @@ export function HomePage() {
   }, [isLoggedIn, album, flowData])
 
   const handleProcessingError = useCallback(() => {
+    resetAllProcessingRuns()
     setStep('hero')
     setFlowData(null)
     setSearchResult(null)
   }, [])
 
   const handleRestart = useCallback(() => {
+    resetAllProcessingRuns()
     resetAlbum()
     setStep('hero')
     setFlowData(null)
@@ -96,7 +99,7 @@ export function HomePage() {
           )}
           {step === 'processing' && flowData && flowData.referenceToken && (
             <ProcessingScreen
-              key="processing"
+              key={`processing-${flowData.albumUrl}-${flowData.referenceToken}`}
               albumUrl={flowData.albumUrl}
               referenceToken={flowData.referenceToken}
               qualityWarning={flowData.qualityWarning}

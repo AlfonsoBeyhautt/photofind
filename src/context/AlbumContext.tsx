@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AlbumData, DriveError } from '../types/album'
 import type { AlbumProvider } from '../types/provider'
 import { detectProviderFromUrl } from '../lib/providers/detectProvider'
@@ -23,11 +23,13 @@ interface AlbumContextType {
   setAlbumUrl: (url: string) => void
   setThumbnailsReady: (ready: boolean) => void
   validateUrl: (url: string) => DriveError | null
-  fetchAlbum: (url?: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
+  fetchAlbum: (url: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
   resetAlbum: () => void
 }
 
 const AlbumContext = createContext<AlbumContextType | null>(null)
+
+const inflightFetches = new Map<string, Promise<{ album: AlbumData | null; error: DriveError | null }>>()
 
 export function AlbumProvider({ children }: { children: ReactNode }) {
   const [albumUrl, setAlbumUrlState] = useState('')
@@ -36,10 +38,12 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<DriveError | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [thumbnailsReady, setThumbnailsReady] = useState(false)
+  const loadingCountRef = useRef(0)
 
   const setAlbumUrl = useCallback((url: string) => {
-    setAlbumUrlState(url)
-    setProvider(detectProviderFromUrl(url))
+    const trimmed = url.trim()
+    setAlbumUrlState(trimmed)
+    setProvider(detectProviderFromUrl(trimmed))
   }, [])
 
   const validateUrl = useCallback((url: string): DriveError | null => {
@@ -93,8 +97,8 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     return null
   }, [])
 
-  const fetchAlbum = useCallback(async (url?: string): Promise<{ album: AlbumData | null; error: DriveError | null }> => {
-    const targetUrl = url ?? albumUrl
+  const fetchAlbum = useCallback(async (url: string): Promise<{ album: AlbumData | null; error: DriveError | null }> => {
+    const targetUrl = url.trim()
     const detected = detectProviderFromUrl(targetUrl)
     console.log('[PhotoFind:Processing] fetch_album_start', { provider: detected, urlLength: targetUrl.length })
 
@@ -113,37 +117,58 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
       return { album: null, error: notReady }
     }
 
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const source = buildAlbumSource(targetUrl, detected)
-      console.log('[PhotoFind:Album] provider_detected', { provider: source.provider })
-      const result = await fetchAlbumByProvider(source)
-      if (result.ok) {
-        setAlbum(result.album)
-        setAlbumUrlState(targetUrl)
-        setProvider(detected)
-        console.log('[PhotoFind:Processing] fetch_album_done', { images: result.album.totalImages })
-        return { album: result.album, error: null }
-      }
-      console.error('[PhotoFind:Processing] fetch_album_error', result.error)
-      setError(result.error)
-      setAlbum(null)
-      return { album: null, error: result.error }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[PhotoFind:Processing] fetch_album_error', { stage: 'exception', message })
-      const fetchError = driveError('UNKNOWN_ERROR', import.meta.env.DEV ? message : undefined)
-      setError(fetchError)
-      setAlbum(null)
-      return { album: null, error: fetchError }
-    } finally {
-      setIsLoading(false)
+    const inflight = inflightFetches.get(targetUrl)
+    if (inflight) {
+      console.log('[PhotoFind:Album] fetch_deduped', { urlLength: targetUrl.length })
+      return inflight
     }
-  }, [albumUrl, validateUrl])
+
+    const request = (async (): Promise<{ album: AlbumData | null; error: DriveError | null }> => {
+      loadingCountRef.current += 1
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const source = buildAlbumSource(targetUrl, detected)
+        console.log('[PhotoFind:Album] provider_detected', { provider: source.provider })
+        const result = await fetchAlbumByProvider(source)
+        if (result.ok) {
+          setAlbum((prev) => (prev === result.album ? prev : result.album))
+          setAlbumUrlState((prev) => (prev === targetUrl ? prev : targetUrl))
+          setProvider((prev) => (prev === detected ? prev : detected))
+          console.log('[PhotoFind:Processing] fetch_album_done', { images: result.album.totalImages })
+          return { album: result.album, error: null }
+        }
+        console.error('[PhotoFind:Processing] fetch_album_error', result.error)
+        setError(result.error)
+        setAlbum(null)
+        return { album: null, error: result.error }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        console.error('[PhotoFind:Processing] fetch_album_error', { stage: 'exception', message })
+        const fetchError = driveError('UNKNOWN_ERROR', import.meta.env.DEV ? message : undefined)
+        setError(fetchError)
+        setAlbum(null)
+        return { album: null, error: fetchError }
+      } finally {
+        loadingCountRef.current = Math.max(0, loadingCountRef.current - 1)
+        if (loadingCountRef.current === 0) {
+          setIsLoading(false)
+        }
+      }
+    })()
+
+    inflightFetches.set(targetUrl, request)
+    try {
+      return await request
+    } finally {
+      inflightFetches.delete(targetUrl)
+    }
+  }, [validateUrl])
 
   const resetAlbum = useCallback(() => {
+    inflightFetches.clear()
+    loadingCountRef.current = 0
     setAlbumUrlState('')
     setProvider('unknown')
     setAlbum(null)
@@ -153,22 +178,25 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     resetImageCache()
   }, [])
 
+  const value = useMemo(
+    () => ({
+      albumUrl,
+      provider,
+      album,
+      error,
+      isLoading,
+      thumbnailsReady,
+      setAlbumUrl,
+      setThumbnailsReady,
+      validateUrl,
+      fetchAlbum,
+      resetAlbum,
+    }),
+    [album, albumUrl, error, fetchAlbum, isLoading, provider, resetAlbum, setAlbumUrl, thumbnailsReady, validateUrl],
+  )
+
   return (
-    <AlbumContext.Provider
-      value={{
-        albumUrl,
-        provider,
-        album,
-        error,
-        isLoading,
-        thumbnailsReady,
-        setAlbumUrl,
-        setThumbnailsReady,
-        validateUrl,
-        fetchAlbum,
-        resetAlbum,
-      }}
-    >
+    <AlbumContext.Provider value={value}>
       {children}
     </AlbumContext.Provider>
   )

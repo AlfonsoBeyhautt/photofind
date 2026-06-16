@@ -11,6 +11,14 @@ import { preloadAllThumbnails } from '../../lib/images/loadQueue'
 import { getGalleryThumbnailUrl } from '../../lib/images/imageUrls'
 import { compareAlbumToReference } from '../../lib/recognition/searchClient'
 import { ProviderComingSoon } from './ProviderComingSoon'
+import { detectProviderFromUrl } from '../../lib/providers/detectProvider'
+import {
+  buildProcessingKey,
+  markProcessingComplete,
+  markProcessingFailed,
+  resetProcessingKey,
+  shouldStartProcessing,
+} from '../../lib/processing/processingRunGuard'
 import { getProviderMeta } from '../../types/provider'
 import type { AlbumData, DriveError } from '../../types/album'
 import type { AlbumProvider } from '../../types/provider'
@@ -33,7 +41,8 @@ export function ProcessingScreen({
   onComplete,
   onError,
 }: ProcessingScreenProps) {
-  const { provider, fetchAlbum, error, setThumbnailsReady } = useAlbum()
+  const provider = detectProviderFromUrl(albumUrl)
+  const { fetchAlbum, error, setThumbnailsReady } = useAlbum()
 
   if (!ACTIVE_PROVIDERS.has(provider)) {
     return <ProviderComingSoon provider={provider} onBack={onError} />
@@ -61,7 +70,7 @@ interface AlbumProcessingScreenProps {
   qualityWarning?: string
   onComplete: (result: RecognitionSearchResult) => void
   onError: () => void
-  fetchAlbum: (url?: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
+  fetchAlbum: (url: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
   error: DriveError | null
   setThumbnailsReady: (ready: boolean) => void
 }
@@ -86,6 +95,7 @@ function AlbumProcessingScreen({
   setThumbnailsReady,
 }: AlbumProcessingScreenProps) {
   const providerMeta = getProviderMeta(provider)
+  const processingKey = buildProcessingKey(provider, albumUrl, referenceToken)
 
   const [progress, setProgress] = useState(0)
   const [imageCount, setImageCount] = useState(0)
@@ -115,10 +125,18 @@ function AlbumProcessingScreen({
 
   const handleCancel = () => {
     abortRef.current?.abort()
+    resetProcessingKey(processingKey)
     onError()
   }
 
   useEffect(() => {
+    console.log('[PhotoFind:Processing] effect_start', { processingKey })
+
+    if (!shouldStartProcessing(processingKey)) {
+      console.log('[PhotoFind:Processing] effect_skipped_duplicate', { processingKey })
+      return
+    }
+
     const abort = new AbortController()
     abortRef.current = abort
     let cancelled = false
@@ -145,7 +163,6 @@ function AlbumProcessingScreen({
       setThumbnailsReadyRef.current(false)
 
       try {
-        console.log('[PhotoFind:Processing] fetch_album_start', { albumUrl, provider })
         const { album, error: fetchError } = await fetchAlbumRef.current(albumUrl)
         if (cancelled || abort.signal.aborted) return
 
@@ -154,6 +171,7 @@ function AlbumProcessingScreen({
           const technical = err ? `${err.code}: ${err.message}` : 'UNKNOWN'
           setLocalError(import.meta.env.DEV ? technical : (err?.message ?? PROVIDER_FETCH_ERROR[provider]))
           setPhase('error')
+          markProcessingFailed(processingKey)
           return
         }
 
@@ -188,6 +206,7 @@ function AlbumProcessingScreen({
         if (result.loaded === 0) {
           setLocalError('No pudimos cargar ninguna miniatura. Verificá la conexión e intentá de nuevo.')
           setPhase('error')
+          markProcessingFailed(processingKey)
           return
         }
 
@@ -218,6 +237,7 @@ function AlbumProcessingScreen({
         if (!compareResult.ok) {
           setLocalError(compareResult.message)
           setPhase('error')
+          markProcessingFailed(processingKey)
           return
         }
 
@@ -225,6 +245,7 @@ function AlbumProcessingScreen({
         setProgress(100)
         setPhase('ready')
         setStatusLine('Preparando resultados...')
+        markProcessingComplete(processingKey)
         setTimeout(() => onCompleteRef.current(compareResult.result), 400)
       } catch (err) {
         if (cancelled || abort.signal.aborted) return
@@ -232,6 +253,7 @@ function AlbumProcessingScreen({
         console.error('[PhotoFind:Processing] fetch_album_error', { message })
         setLocalError(import.meta.env.DEV ? message : PROVIDER_FETCH_ERROR[provider])
         setPhase('error')
+        markProcessingFailed(processingKey)
       } finally {
         if (intervalRef.current) {
           clearInterval(intervalRef.current)
@@ -250,7 +272,7 @@ function AlbumProcessingScreen({
         intervalRef.current = null
       }
     }
-  }, [albumUrl, referenceToken, provider])
+  }, [albumUrl, referenceToken])
 
   if (phase === 'error') {
     const friendly = PROVIDER_FETCH_ERROR[provider]
