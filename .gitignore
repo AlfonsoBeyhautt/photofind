@@ -10,7 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-api/index.js
+api/bundle/app.js
 data
 *.local
 .env

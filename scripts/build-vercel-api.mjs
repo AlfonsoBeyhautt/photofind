@@ -4,15 +4,20 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
-const outDir = path.join(root, '..', 'api')
-const outfile = path.join(outDir, 'index.js')
+const apiDir = path.join(root, '..', 'api')
+const bundleDir = path.join(apiDir, 'bundle')
+const outfile = path.join(bundleDir, 'app.js')
 
-if (!existsSync(outDir)) {
-  mkdirSync(outDir, { recursive: true })
+mkdirSync(bundleDir, { recursive: true })
+
+const handlerPath = path.join(apiDir, 'handler.ts')
+if (!existsSync(handlerPath)) {
+  console.error('[PhotoFind] Missing api/handler.ts')
+  process.exit(1)
 }
 
 await esbuild.build({
-  entryPoints: [path.join(outDir, 'handler.ts')],
+  entryPoints: [handlerPath],
   bundle: true,
   platform: 'node',
   target: 'node20',
