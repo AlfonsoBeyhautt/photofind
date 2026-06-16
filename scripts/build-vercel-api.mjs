@@ -16,6 +16,7 @@ if (!existsSync(handlerPath)) {
   process.exit(1)
 }
 
+/** Native modules must stay external — Vercel includes them via includeFiles in vercel.json */
 await esbuild.build({
   entryPoints: [handlerPath],
   bundle: true,
@@ -24,6 +25,7 @@ await esbuild.build({
   format: 'esm',
   outfile,
   packages: 'external',
+  external: ['sharp', 'heic-convert'],
   logLevel: 'info',
   banner: {
     js: "import { createRequire as __photofindCreateRequire } from 'module'; const require = __photofindCreateRequire(import.meta.url);",

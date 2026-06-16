@@ -4,11 +4,15 @@ import { unlink, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import sharp from 'sharp'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error no declaration file
 import heicConvert from 'heic-convert'
 import { heicDebugLog, isJpegBuffer, magicBytesHex } from './heicDebug'
+
+async function getSharp() {
+  const mod = await import('sharp')
+  return mod.default
+}
 
 const HEIC_MIME = new Set(['image/heic', 'image/heif'])
 const HEIC_EXT = /\.(heic|heif)$/i
@@ -179,6 +183,7 @@ async function convertHeicToJpeg(
   attempts.push({
     name: 'sharp',
     run: async () => {
+      const sharp = await getSharp()
       const out = await sharp(buffer, { failOn: 'none' })
         .jpeg({ quality, mozjpeg: true })
         .toBuffer()
@@ -294,6 +299,7 @@ async function runSips(buffer: Buffer): Promise<Buffer> {
 }
 
 async function resizeToJpeg(buffer: Buffer, quality: number, maxWidth?: number): Promise<Buffer> {
+  const sharp = await getSharp()
   let pipeline = sharp(buffer, { failOn: 'none' })
   if (maxWidth) {
     pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true })
