@@ -27,6 +27,10 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
     setError(null)
     try {
       const result = await deleteFacialProfile()
+      if (!result.ok) {
+        setError('error' in result ? result.error.message : 'No pudimos borrar el perfil facial.')
+        return
+      }
       setFacialProfile(result.facialProfile)
       setEditing(false)
     } catch {

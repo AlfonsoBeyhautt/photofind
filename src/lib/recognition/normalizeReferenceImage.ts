@@ -1,3 +1,5 @@
+import { logCapture } from '../api/apiFetch'
+
 const MAX_DIMENSION = 1920
 const JPEG_QUALITY = 0.92
 
@@ -54,6 +56,8 @@ export async function normalizeReferenceToJpegBlob(input: File | Blob): Promise<
 export function captureVideoFrameToJpeg(video: HTMLVideoElement): Promise<Blob> {
   const width = video.videoWidth
   const height = video.videoHeight
+  logCapture('capture_start', { videoWidth: width, videoHeight: height, readyState: video.readyState })
+
   if (!width || !height) {
     return Promise.reject(new Error('CAMERA_NOT_READY'))
   }
@@ -72,7 +76,14 @@ export function captureVideoFrameToJpeg(video: HTMLVideoElement): Promise<Blob> 
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('CAPTURE_FAILED'))),
+      (blob) => {
+        if (blob) {
+          logCapture('blob_created', { size: blob.size, type: blob.type || 'image/jpeg' })
+          resolve(blob)
+        } else {
+          reject(new Error('CAPTURE_FAILED'))
+        }
+      },
       'image/jpeg',
       JPEG_QUALITY,
     )

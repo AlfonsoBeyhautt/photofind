@@ -2,7 +2,9 @@ import type {
   ReferenceSource,
   SelectReferenceFaceResponse,
   ValidateReferenceResponse,
+  ReferenceErrorCode,
 } from '../../types/recognition'
+import { apiPostJson, isApiTransportError, logCapture } from '../api/apiFetch'
 
 const REFERENCE_MESSAGES: Record<string, string> = {
   REFERENCE_NO_FACE: 'No pudimos detectar una cara clara. Probá con otra foto más frontal.',
@@ -14,6 +16,12 @@ const REFERENCE_MESSAGES: Record<string, string> = {
   REFERENCE_VALIDATION_FAILED: 'No pudimos validar la foto de referencia.',
   REFERENCE_DETECTION_EXPIRED: 'La detección expiró. Volvé a subir la foto.',
   REFERENCE_FACE_NOT_FOUND: 'No encontramos la cara seleccionada.',
+  API_ROUTE_NOT_FOUND: 'El servidor de reconocimiento no está disponible. Si estás en producción, verificá el deploy de /api en Vercel.',
+  API_INVALID_RESPONSE: 'El servidor respondió de forma inesperada.',
+  NETWORK_ERROR: 'No pudimos conectar con el servidor.',
+  AWS_CREDENTIALS_MISSING: 'AWS Rekognition no está configurado en el servidor.',
+  AWS_REKOGNITION_FAILED: 'AWS Rekognition falló al analizar la imagen.',
+  IMAGE_NORMALIZATION_FAILED: 'No pudimos procesar la imagen en el servidor.',
 }
 
 export function getReferenceErrorMessage(code: string, fallback?: string): string {
@@ -32,6 +40,7 @@ export async function fileToBase64(file: File): Promise<string> {
 
 /** Camera capture is already JPEG from canvas. */
 export async function blobToBase64(blob: Blob): Promise<string> {
+  logCapture('blob_created', { size: blob.size, type: blob.type || 'image/jpeg' })
   return fileToBase64(new File([blob], 'reference.jpg', { type: blob.type || 'image/jpeg' }))
 }
 
@@ -40,52 +49,60 @@ export async function validateReferenceImage(
   mimeType: string,
   source: ReferenceSource,
 ): Promise<ValidateReferenceResponse> {
-  try {
-    const res = await fetch('/api/recognize/validate-reference', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataBase64, mimeType, source }),
-    })
+  const data = await apiPostJson<ValidateReferenceResponse>(
+    '/api/recognize/validate-reference',
+    { dataBase64, mimeType, source },
+    { logLabel: 'validate-reference' },
+  )
 
-    const data = (await res.json()) as ValidateReferenceResponse
-    if (!data.ok && !data.error) {
-      return {
-        ok: false,
-        error: { code: 'REFERENCE_VALIDATION_FAILED', message: getReferenceErrorMessage('REFERENCE_VALIDATION_FAILED') },
-      }
+  if (isApiTransportError(data)) {
+    const code = data.error.code as ReferenceErrorCode
+    return {
+      ok: false,
+      error: {
+        code,
+        message: getReferenceErrorMessage(data.error.code, data.error.message),
+      },
     }
-    return data
-  } catch {
+  }
+
+  const result = data
+  if (!result.ok && !result.error) {
     return {
       ok: false,
       error: { code: 'REFERENCE_VALIDATION_FAILED', message: getReferenceErrorMessage('REFERENCE_VALIDATION_FAILED') },
     }
   }
+  return result
 }
 
 export async function selectReferenceFace(
   detectionToken: string,
   faceIndex: number,
 ): Promise<SelectReferenceFaceResponse> {
-  try {
-    const res = await fetch('/api/recognize/select-reference-face', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ detectionToken, faceIndex }),
-    })
+  const data = await apiPostJson<SelectReferenceFaceResponse>(
+    '/api/recognize/select-reference-face',
+    { detectionToken, faceIndex },
+    { logLabel: 'select-reference-face' },
+  )
 
-    const data = (await res.json()) as SelectReferenceFaceResponse
-    if (!data.ok && !data.error) {
-      return {
-        ok: false,
-        error: { code: 'REFERENCE_VALIDATION_FAILED', message: getReferenceErrorMessage('REFERENCE_VALIDATION_FAILED') },
-      }
+  if (isApiTransportError(data)) {
+    const code = data.error.code as ReferenceErrorCode
+    return {
+      ok: false,
+      error: {
+        code,
+        message: getReferenceErrorMessage(data.error.code, data.error.message),
+      },
     }
-    return data
-  } catch {
+  }
+
+  const result = data
+  if (!result.ok && !result.error) {
     return {
       ok: false,
       error: { code: 'REFERENCE_VALIDATION_FAILED', message: getReferenceErrorMessage('REFERENCE_VALIDATION_FAILED') },
     }
   }
+  return result
 }

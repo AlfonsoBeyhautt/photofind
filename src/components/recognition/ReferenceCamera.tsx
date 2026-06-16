@@ -3,6 +3,7 @@ import { Camera, Loader2, RefreshCw, User } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
 import { captureVideoFrameToJpeg } from '../../lib/recognition/normalizeReferenceImage'
+import { captureErrorMessage } from '../../lib/api/apiFetch'
 import {
   blobToBase64,
   getReferenceErrorMessage,
@@ -85,6 +86,13 @@ export function ReferenceCamera({
 
     let cancelled = false
 
+    const markReady = () => {
+      const el = videoRef.current
+      if (el && el.videoWidth > 0 && el.videoHeight > 0) {
+        setReady(true)
+      }
+    }
+
     async function start() {
       setReady(false)
       try {
@@ -97,10 +105,12 @@ export function ReferenceCamera({
           return
         }
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play()
-          setReady(true)
+        const el = videoRef.current
+        if (el) {
+          el.srcObject = stream
+          el.addEventListener('loadedmetadata', markReady)
+          await el.play()
+          markReady()
         }
       } catch {
         onError('No pudimos acceder a la cámara. Revisá los permisos del navegador.')
@@ -112,6 +122,7 @@ export function ReferenceCamera({
 
     return () => {
       cancelled = true
+      videoRef.current?.removeEventListener('loadedmetadata', markReady)
       stopCamera()
     }
   }, [active, disabled, cameraKey, previewUrl, validated, selection, onError, stopCamera])
@@ -152,7 +163,13 @@ export function ReferenceCamera({
   }
 
   const capture = async () => {
-    if (!videoRef.current || !ready || loading) return
+    const video = videoRef.current
+    if (!video || !ready || loading) return
+
+    if (!video.videoWidth || !video.videoHeight) {
+      onError('La cámara todavía no está lista. Esperá un momento e intentá de nuevo.')
+      return
+    }
 
     setLoading(true)
     setValidated(false)
@@ -161,7 +178,7 @@ export function ReferenceCamera({
     onError('')
 
     try {
-      const blob = await captureVideoFrameToJpeg(videoRef.current)
+      const blob = await captureVideoFrameToJpeg(video)
       revokePreview()
       const preview = URL.createObjectURL(blob)
       previewUrlRef.current = preview
@@ -171,10 +188,14 @@ export function ReferenceCamera({
       const dataBase64 = await blobToBase64(blob)
       const result = await validateReferenceImage(dataBase64, 'image/jpeg', 'camera')
       handleValidationResult(result)
-    } catch {
+    } catch (err) {
       setCaptureError(true)
       resetToLive(false)
-      onError('No pudimos capturar la selfie. Probá de nuevo.')
+      const message = import.meta.env.DEV
+        ? captureErrorMessage(err)
+        : 'No pudimos capturar la selfie. Probá de nuevo.'
+      console.error('[PhotoFind:Reference] capture_error', err)
+      onError(message)
     } finally {
       setLoading(false)
     }

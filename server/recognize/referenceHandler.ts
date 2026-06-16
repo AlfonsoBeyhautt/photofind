@@ -24,6 +24,10 @@ export async function handleValidateReferenceRequest(
   res: ServerResponse,
   rawBody: string,
 ): Promise<void> {
+  console.log('[PhotoFind:Backend] validate_reference_received', {
+    bodyBytes: rawBody.length,
+  })
+
   let body: ValidateReferenceBody
   try {
     body = JSON.parse(rawBody) as ValidateReferenceBody
@@ -56,7 +60,16 @@ export async function handleValidateReferenceRequest(
     return
   }
 
+  console.log('[PhotoFind:Backend] validate_reference_image', {
+    source,
+    decodedBytes: buffer.length,
+  })
+
   const result = await validateReferenceImage(buffer, source)
+  console.log('[PhotoFind:Backend] validate_reference_result', {
+    ok: result.ok,
+    code: result.ok ? undefined : result.error.code,
+  })
   sendJson(res, result.ok ? 200 : 400, result)
 }
 

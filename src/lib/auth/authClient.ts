@@ -7,6 +7,7 @@ import type {
   UseFacialProfileResponse,
 } from '../../types/auth'
 import type { DetectedFace, ReferenceSource } from '../../types/recognition'
+import { apiGetJson, apiPostJson, isApiTransportError } from '../api/apiFetch'
 import { getReferenceErrorMessage } from '../../lib/recognition/referenceClient'
 import { isSupabaseConfigured, supabase } from '../supabase/client'
 import type { AuthUser } from '../../types/auth'
@@ -16,10 +17,19 @@ const AUTH_MESSAGES: Record<string, string> = {
   EMAIL_IN_USE: 'Ya existe una cuenta con ese email.',
   WEAK_PASSWORD: 'La contraseña debe tener al menos 8 caracteres.',
   AUTH_REQUIRED: 'Tenés que iniciar sesión.',
+  AUTH_TOKEN_MISSING: 'Tenés que iniciar sesión.',
   PROFILE_NOT_FOUND: 'Todavía no creaste tu perfil facial.',
   INVALID_REQUEST: 'Completá todos los campos.',
   AUTH_FAILED: 'No pudimos completar la solicitud.',
   SUPABASE_NOT_CONFIGURED: 'Supabase no está configurado. Revisá las variables de entorno.',
+  SUPABASE_STORAGE_FAILED: 'No pudimos guardar la foto en Supabase Storage.',
+  SUPABASE_PROFILE_METADATA_FAILED: 'No pudimos guardar los datos del perfil facial.',
+  PROFILE_SAVE_FAILED: 'No pudimos guardar el perfil facial.',
+  IMAGE_NORMALIZATION_FAILED: 'No pudimos procesar la imagen en el servidor.',
+}
+
+function devMessage(code: string, fallback: string): string {
+  return import.meta.env.DEV ? `${code}: ${fallback}` : fallback
 }
 
 export function getAuthErrorMessage(code: string, fallback?: string): string {
@@ -48,17 +58,69 @@ async function getAccessToken(): Promise<string | null> {
   return session?.access_token ?? null
 }
 
-async function authFetch<T>(url: string, init?: RequestInit): Promise<T> {
+async function authGetJson<T>(url: string): Promise<T | { ok: false; error: { code: string; message: string } }> {
   const token = await getAccessToken()
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
+  if (!token) {
+    return { ok: false, error: { code: 'AUTH_TOKEN_MISSING', message: getAuthErrorMessage('AUTH_TOKEN_MISSING') } }
+  }
+
+  const data = await apiGetJson<T>(url, { authToken: token })
+  if (isApiTransportError(data)) {
+    return {
+      ok: false,
+      error: {
+        code: data.error.code,
+        message: devMessage(data.error.code, data.error.message),
+      },
+    }
+  }
+  return data as T
+}
+
+async function authPostJson<T>(
+  url: string,
+  body?: unknown,
+  init?: { method?: string },
+): Promise<T | { ok: false; error: { code: string; message: string } }> {
+  const token = await getAccessToken()
+  if (!token) {
+    return { ok: false, error: { code: 'AUTH_TOKEN_MISSING', message: getAuthErrorMessage('AUTH_TOKEN_MISSING') } }
+  }
+
+  const data = await apiPostJson<T>(url, body ?? {}, {
+    authToken: token,
+    logLabel: url,
+    method: init?.method ?? 'POST',
   })
-  return res.json() as Promise<T>
+  if (isApiTransportError(data)) {
+    return {
+      ok: false,
+      error: {
+        code: data.error.code,
+        message: devMessage(data.error.code, data.error.message),
+      },
+    }
+  }
+  return data as T
+}
+
+async function authDeleteJson<T>(url: string): Promise<T | { ok: false; error: { code: string; message: string } }> {
+  const token = await getAccessToken()
+  if (!token) {
+    return { ok: false, error: { code: 'AUTH_TOKEN_MISSING', message: getAuthErrorMessage('AUTH_TOKEN_MISSING') } }
+  }
+
+  const data = await apiGetJson<T>(url, { authToken: token, method: 'DELETE' })
+  if (isApiTransportError(data)) {
+    return {
+      ok: false,
+      error: {
+        code: data.error.code,
+        message: devMessage(data.error.code, data.error.message),
+      },
+    }
+  }
+  return data as T
 }
 
 export async function fetchMe(): Promise<AuthMeResponse> {
@@ -68,7 +130,14 @@ export async function fetchMe(): Promise<AuthMeResponse> {
   }
 
   try {
-    const data = await authFetch<AuthMeResponse>('/api/auth/me')
+    const data = await authGetJson<AuthMeResponse>('/api/auth/me')
+    if ('error' in data && data.ok === false) {
+      return {
+        ok: true,
+        user: mapSupabaseUser(session.user),
+        facialProfile: { hasProfile: false },
+      }
+    }
     if (data.user) return data
     return {
       ok: true,
@@ -148,12 +217,12 @@ export async function logoutUser(): Promise<void> {
   await supabase.auth.signOut()
 }
 
-export async function deleteFacialProfile(): Promise<{ ok: boolean; facialProfile: FacialProfileState }> {
-  return authFetch('/api/auth/facial-profile', { method: 'DELETE' })
+export async function deleteFacialProfile(): Promise<{ ok: boolean; facialProfile: FacialProfileState } | { ok: false; error: { code: string; message: string } }> {
+  return authDeleteJson('/api/auth/facial-profile')
 }
 
-export async function useFacialProfile(): Promise<UseFacialProfileResponse> {
-  return authFetch<UseFacialProfileResponse>('/api/auth/facial-profile/use', { method: 'POST' })
+export async function useFacialProfile(): Promise<UseFacialProfileResponse | { ok: false; error: { code: string; message: string } }> {
+  return authPostJson<UseFacialProfileResponse>('/api/auth/facial-profile/use')
 }
 
 export type SaveFacialProfileResponse =
@@ -166,32 +235,30 @@ export async function saveFacialProfileFromImage(
   mimeType: string,
   source: ReferenceSource,
 ): Promise<SaveFacialProfileResponse> {
-  return authFetch('/api/auth/facial-profile', {
-    method: 'POST',
-    body: JSON.stringify({ dataBase64, mimeType, source }),
-  })
+  return authPostJson<SaveFacialProfileResponse>('/api/auth/facial-profile', {
+    dataBase64,
+    mimeType,
+    source,
+  }) as Promise<SaveFacialProfileResponse>
 }
 
 export async function saveFacialProfileFromSelection(
   detectionToken: string,
   faceIndex: number,
 ): Promise<SaveFacialProfileResponse> {
-  return authFetch('/api/auth/facial-profile', {
-    method: 'POST',
-    body: JSON.stringify({ detectionToken, faceIndex }),
-  })
+  return authPostJson<SaveFacialProfileResponse>('/api/auth/facial-profile', {
+    detectionToken,
+    faceIndex,
+  }) as Promise<SaveFacialProfileResponse>
 }
 
 export async function fetchDashboard(): Promise<DashboardData | { ok: false; error: { code: string; message: string } }> {
-  return authFetch('/api/auth/dashboard')
+  return authGetJson('/api/auth/dashboard')
 }
 
 export async function recordSearch(data: RecordSearchBody): Promise<void> {
   try {
-    await authFetch('/api/auth/search-history', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
+    await authPostJson('/api/auth/search-history', data)
   } catch {
     // No bloquear el flujo de búsqueda si falla el guardado del historial
     console.warn('[PhotoFind] No se pudo guardar la búsqueda en el historial.')

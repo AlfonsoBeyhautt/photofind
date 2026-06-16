@@ -22,6 +22,9 @@ export type ReferenceValidationErrorCode =
   | 'REFERENCE_INVALID_IMAGE'
   | 'REFERENCE_TOO_LARGE'
   | 'REKOGNITION_UNAVAILABLE'
+  | 'AWS_CREDENTIALS_MISSING'
+  | 'AWS_REKOGNITION_FAILED'
+  | 'IMAGE_NORMALIZATION_FAILED'
   | 'REFERENCE_VALIDATION_FAILED'
   | 'REFERENCE_DETECTION_EXPIRED'
   | 'REFERENCE_FACE_NOT_FOUND'
@@ -85,6 +88,9 @@ const MESSAGES: Record<ReferenceValidationErrorCode, string> = {
   REFERENCE_INVALID_IMAGE: 'No pudimos leer la imagen de referencia. Usá JPG, PNG o HEIC.',
   REFERENCE_TOO_LARGE: 'La imagen es demasiado grande. Usá una foto de hasta 15 MB.',
   REKOGNITION_UNAVAILABLE: 'El servicio de reconocimiento facial no está configurado.',
+  AWS_CREDENTIALS_MISSING: 'AWS Rekognition no está configurado en el servidor.',
+  AWS_REKOGNITION_FAILED: 'AWS Rekognition no pudo analizar la imagen.',
+  IMAGE_NORMALIZATION_FAILED: 'No pudimos procesar la imagen en el servidor.',
   REFERENCE_VALIDATION_FAILED: 'No pudimos validar la foto de referencia.',
   REFERENCE_DETECTION_EXPIRED: 'La detección expiró. Volvé a subir la foto.',
   REFERENCE_FACE_NOT_FOUND: 'No encontramos la cara seleccionada.',
@@ -182,8 +188,9 @@ export async function normalizeReferenceBytes(
     const buffer = await out.jpeg({ quality: 92, mozjpeg: true }).toBuffer()
     void mimeType
     return { buffer, contentType: 'image/jpeg' }
-  } catch {
-    throw new Error('INVALID_IMAGE')
+  } catch (err) {
+    console.error('[PhotoFind:Backend] image_normalization_failed', err instanceof Error ? err.message : err)
+    throw new Error('IMAGE_NORMALIZATION_FAILED')
   }
 }
 
@@ -196,22 +203,26 @@ export async function validateReferenceImage(
   }
 
   if (!canUseRekognition()) {
-    return fail('REKOGNITION_UNAVAILABLE')
+    console.error('[PhotoFind:Backend] aws_credentials_missing')
+    return fail('AWS_CREDENTIALS_MISSING')
   }
 
   let normalized: { buffer: Buffer; contentType: string }
   try {
     normalized = await normalizeReferenceBytes(input)
+    console.log('[PhotoFind:Backend] image_normalized', { bytes: normalized.buffer.length })
   } catch {
-    return fail('REFERENCE_INVALID_IMAGE')
+    return fail('IMAGE_NORMALIZATION_FAILED')
   }
 
   let faces: FaceDetail[]
   try {
+    console.log('[PhotoFind:Backend] aws_detectfaces_start')
     faces = await detectFaces(normalized.buffer)
+    console.log('[PhotoFind:Backend] aws_detectfaces_ok', { faceCount: faces.length })
   } catch (error) {
-    console.error('[PhotoFind:Recognize] DetectFaces failed:', error instanceof Error ? error.message : error)
-    return fail('REFERENCE_VALIDATION_FAILED')
+    console.error('[PhotoFind:Backend] aws_detectfaces_error', error instanceof Error ? error.message : error)
+    return fail('AWS_REKOGNITION_FAILED')
   }
 
   const detectedFaces = toDetectedFaces(faces)

@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { ImagePlus, Loader2, Camera, RefreshCw } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/Button'
+import { captureErrorMessage } from '../../lib/api/apiFetch'
 import { normalizeReferenceToJpegBlob, captureVideoFrameToJpeg } from '../../lib/recognition/normalizeReferenceImage'
 import { blobToBase64 } from '../../lib/recognition/referenceClient'
 import {
@@ -93,8 +94,9 @@ function ProfileUploadFlow({ onSaved, onError }: FacialProfileSetupProps) {
       if ('profile' in result) {
         onSaved(result.profile)
       }
-    } catch {
-      onError('No pudimos procesar la imagen.')
+    } catch (err) {
+      console.error('[PhotoFind:Reference] profile_upload_error', err)
+      onError(import.meta.env.DEV && err instanceof Error ? err.message : 'No pudimos procesar la imagen.')
     } finally {
       setLoading(false)
     }
@@ -251,9 +253,10 @@ function ProfileCameraFlow({ onSaved, onError }: FacialProfileSetupProps) {
         onSaved(result.profile)
       }
     } catch (err) {
-      const message = err instanceof Error && err.message === 'CAMERA_NOT_READY'
-        ? 'La cámara todavía no está lista. Esperá un momento e intentá de nuevo.'
-        : 'No pudimos capturar la selfie. Probá de nuevo.'
+      const message = err instanceof Error && ['CAMERA_NOT_READY', 'CAPTURE_FAILED', 'CANVAS_FAILED'].includes(err.message)
+        ? (import.meta.env.DEV ? captureErrorMessage(err) : 'La cámara todavía no está lista. Esperá un momento e intentá de nuevo.')
+        : (import.meta.env.DEV && err instanceof Error ? err.message : 'No pudimos capturar la selfie. Probá de nuevo.')
+      console.error('[PhotoFind:Reference] profile_capture_error', err)
       onError(message)
     } finally {
       setLoading(false)

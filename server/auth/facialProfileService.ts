@@ -59,10 +59,18 @@ export async function saveUserFacialProfile(userId: string, body: SaveFacialProf
         qualityWarning: selected.qualityWarning,
       })
       return { ok: true as const, profile }
-    } catch {
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'PROFILE_SAVE_FAILED'
       return {
         ok: false as const,
-        error: { code: 'PROFILE_SAVE_FAILED', message: 'No pudimos guardar el perfil facial.' },
+        error: {
+          code,
+          message: code === 'SUPABASE_STORAGE_FAILED'
+            ? 'No pudimos guardar la foto en Supabase Storage.'
+            : code === 'SUPABASE_PROFILE_METADATA_FAILED'
+              ? 'No pudimos guardar los datos del perfil facial.'
+              : 'No pudimos guardar el perfil facial.',
+        },
       }
     }
   }
@@ -106,7 +114,7 @@ export async function saveUserFacialProfile(userId: string, body: SaveFacialProf
   } catch {
     return {
       ok: false as const,
-      error: { code: 'PROFILE_INVALID_IMAGE', message: 'No pudimos procesar la imagen.' },
+      error: { code: 'IMAGE_NORMALIZATION_FAILED', message: 'No pudimos procesar la imagen.' },
     }
   }
 
@@ -120,10 +128,18 @@ export async function saveUserFacialProfile(userId: string, body: SaveFacialProf
       qualityWarning: validated.qualityWarning,
     })
     return { ok: true as const, profile }
-  } catch {
+  } catch (err) {
+    const code = err instanceof Error ? err.message : 'PROFILE_SAVE_FAILED'
     return {
       ok: false as const,
-      error: { code: 'PROFILE_SAVE_FAILED', message: 'No pudimos guardar el perfil facial.' },
+      error: {
+        code,
+        message: code === 'SUPABASE_STORAGE_FAILED'
+          ? 'No pudimos guardar la foto en Supabase Storage.'
+          : code === 'SUPABASE_PROFILE_METADATA_FAILED'
+            ? 'No pudimos guardar los datos del perfil facial.'
+            : 'No pudimos guardar el perfil facial.',
+      },
     }
   }
 }

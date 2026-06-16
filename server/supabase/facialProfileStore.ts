@@ -77,6 +77,8 @@ export async function saveFacialProfile(
   const supabase = getSupabaseAdmin()
   const storagePath = facialProfileStoragePath(userId)
 
+  console.log('[PhotoFind:Supabase] profile_upload_start', { userId, storagePath, bytes: data.buffer.length })
+
   const { error: uploadError } = await supabase.storage
     .from(FACIAL_PROFILES_BUCKET)
     .upload(storagePath, data.buffer, {
@@ -85,8 +87,8 @@ export async function saveFacialProfile(
     })
 
   if (uploadError) {
-    console.error('[PhotoFind:Supabase] upload:', uploadError.message)
-    throw new Error('PROFILE_SAVE_FAILED')
+    console.error('[PhotoFind:Supabase] profile_upload_error', uploadError.message)
+    throw new Error('SUPABASE_STORAGE_FAILED')
   }
 
   const row = {
@@ -106,8 +108,8 @@ export async function saveFacialProfile(
     .single()
 
   if (dbError || !saved) {
-    console.error('[PhotoFind:Supabase] upsert:', dbError?.message)
-    throw new Error('PROFILE_SAVE_FAILED')
+    console.error('[PhotoFind:Supabase] profile_metadata_error', dbError?.message)
+    throw new Error('SUPABASE_PROFILE_METADATA_FAILED')
   }
 
   return rowToMeta(saved as FacialProfileRow)
