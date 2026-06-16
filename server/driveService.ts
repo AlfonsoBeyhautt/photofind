@@ -116,18 +116,25 @@ function mapFetchError(err: unknown): DriveError {
     return driveError('PRIVATE_FOLDER')
   }
 
+  if (status === 400 || status === 401) {
+    return driveError('GOOGLE_DRIVE_API_ERROR', message || undefined)
+  }
+
   if (message.toLowerCase().includes('not found')) {
     return driveError('PRIVATE_FOLDER')
   }
 
-  return driveError('UNKNOWN_ERROR', message || undefined)
+  return driveError('GOOGLE_DRIVE_API_ERROR', message || undefined)
 }
 
 export async function fetchGoogleDriveAlbum(
   url: string,
   apiKey: string | undefined,
 ): Promise<FetchAlbumResponse> {
+  console.log('[PhotoFind:Drive] fetch_start', { hasApiKey: Boolean(apiKey) })
+
   if (!apiKey) {
+    console.error('[PhotoFind:Drive] fetch_error', { code: 'API_KEY_MISSING' })
     return { ok: false, error: driveError('API_KEY_MISSING') }
   }
 
@@ -164,8 +171,11 @@ export async function fetchGoogleDriveAlbum(
       totalImages: images.length,
     }
 
+    console.log('[PhotoFind:Drive] fetch_success', { folderId, images: album.totalImages })
     return { ok: true, album }
   } catch (err) {
-    return { ok: false, error: mapFetchError(err) }
+    const mapped = mapFetchError(err)
+    console.error('[PhotoFind:Drive] fetch_error', { code: mapped.code, message: mapped.message })
+    return { ok: false, error: mapped }
   }
 }

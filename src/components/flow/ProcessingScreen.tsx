@@ -61,12 +61,19 @@ interface AlbumProcessingScreenProps {
   qualityWarning?: string
   onComplete: (result: RecognitionSearchResult) => void
   onError: () => void
-  fetchAlbum: (url?: string) => Promise<AlbumData | null>
+  fetchAlbum: (url?: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
   error: DriveError | null
   setThumbnailsReady: (ready: boolean) => void
 }
 
 type Phase = 'fetching' | 'preloading' | 'comparing' | 'ready' | 'error'
+
+const PROVIDER_FETCH_ERROR: Record<AlbumProcessingScreenProps['provider'], string> = {
+  'google-drive': 'No pudimos leer el álbum de Google Drive.',
+  dropbox: 'No pudimos leer el álbum de Dropbox.',
+  pixieset: 'No pudimos leer la galería de Pixieset.',
+  wetransfer: 'No pudimos leer el transfer de WeTransfer.',
+}
 
 function AlbumProcessingScreen({
   albumUrl,
@@ -96,6 +103,15 @@ function AlbumProcessingScreen({
   const [localError, setLocalError] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const fetchAlbumRef = useRef(fetchAlbum)
+  const onCompleteRef = useRef(onComplete)
+  const setThumbnailsReadyRef = useRef(setThumbnailsReady)
+  const errorRef = useRef(error)
+
+  fetchAlbumRef.current = fetchAlbum
+  onCompleteRef.current = onComplete
+  setThumbnailsReadyRef.current = setThumbnailsReady
+  errorRef.current = error
 
   const handleCancel = () => {
     abortRef.current?.abort()
@@ -126,87 +142,102 @@ function AlbumProcessingScreen({
       setFetchedAlbum(null)
       setLocalError(null)
       setTrialWarning(null)
-      setThumbnailsReady(false)
+      setThumbnailsReadyRef.current(false)
 
-      const album = await fetchAlbum(albumUrl)
-      if (cancelled || abort.signal.aborted) return
+      try {
+        console.log('[PhotoFind:Processing] fetch_album_start', { albumUrl, provider })
+        const { album, error: fetchError } = await fetchAlbumRef.current(albumUrl)
+        if (cancelled || abort.signal.aborted) return
 
-      if (intervalRef.current) clearInterval(intervalRef.current)
+        if (!album) {
+          const err = fetchError ?? errorRef.current
+          const technical = err ? `${err.code}: ${err.message}` : 'UNKNOWN'
+          setLocalError(import.meta.env.DEV ? technical : (err?.message ?? PROVIDER_FETCH_ERROR[provider]))
+          setPhase('error')
+          return
+        }
 
-      if (!album) {
+        setFetchedAlbum(album)
+        setImageCount(album.totalImages)
+        if (album.totalImages > 50) {
+          setTrialWarning('Modo prueba: analizaremos las primeras 50 fotos.')
+        }
+        setProgress(28)
+        setPhase('preloading')
+        setStatusLine('Preparando miniaturas...')
+
+        const thumbnailUrls = album.images.map((img) => getGalleryThumbnailUrl(img))
+        setPreloadTotal(thumbnailUrls.length)
+
+        const result = await preloadAllThumbnails(
+          thumbnailUrls,
+          ({ loaded, failed, completed, total }) => {
+            if (cancelled || abort.signal.aborted) return
+            setPreloadLoaded(loaded)
+            setPreloadFailed(failed)
+            setPreloadCompleted(completed)
+            setPreloadTotal(total)
+            const pct = 28 + (completed / total) * 32
+            setProgress(pct)
+          },
+          abort.signal,
+        )
+
+        if (cancelled || abort.signal.aborted) return
+
+        if (result.loaded === 0) {
+          setLocalError('No pudimos cargar ninguna miniatura. Verificá la conexión e intentá de nuevo.')
+          setPhase('error')
+          return
+        }
+
+        setThumbnailsReadyRef.current(true)
+        setProgress(62)
+        setPhase('comparing')
+        setStatusLine('Validando referencia...')
+        await new Promise((r) => setTimeout(r, 400))
+        if (cancelled || abort.signal.aborted) return
+
+        setStatusLine('Buscando coincidencias...')
+        const compareResult = await compareAlbumToReference(
+          referenceToken,
+          album.images,
+          ({ compared, total, matched }) => {
+            if (cancelled || abort.signal.aborted) return
+            setCompareDone(compared)
+            setCompareTotal(total)
+            setMatchCount(matched)
+            setStatusLine(`Comparando fotos ${compared}/${total}`)
+            const pct = 62 + (compared / total) * 36
+            setProgress(pct)
+          },
+        )
+
+        if (cancelled || abort.signal.aborted) return
+
+        if (!compareResult.ok) {
+          setLocalError(compareResult.message)
+          setPhase('error')
+          return
+        }
+
+        setMatchCount(compareResult.result.matchedImageIds.length)
+        setProgress(100)
+        setPhase('ready')
+        setStatusLine('Preparando resultados...')
+        setTimeout(() => onCompleteRef.current(compareResult.result), 400)
+      } catch (err) {
+        if (cancelled || abort.signal.aborted) return
+        const message = err instanceof Error ? err.message : String(err)
+        console.error('[PhotoFind:Processing] fetch_album_error', { message })
+        setLocalError(import.meta.env.DEV ? message : PROVIDER_FETCH_ERROR[provider])
         setPhase('error')
-        return
+      } finally {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
       }
-
-      setFetchedAlbum(album)
-      setImageCount(album.totalImages)
-      if (album.totalImages > 50) {
-        setTrialWarning('Modo prueba: analizaremos las primeras 50 fotos.')
-      }
-      setProgress(28)
-      setPhase('preloading')
-      setStatusLine('Preparando miniaturas...')
-
-      const thumbnailUrls = album.images.map((img) => getGalleryThumbnailUrl(img))
-      setPreloadTotal(thumbnailUrls.length)
-
-      const result = await preloadAllThumbnails(
-        thumbnailUrls,
-        ({ loaded, failed, completed, total }) => {
-          if (cancelled || abort.signal.aborted) return
-          setPreloadLoaded(loaded)
-          setPreloadFailed(failed)
-          setPreloadCompleted(completed)
-          setPreloadTotal(total)
-          const pct = 28 + (completed / total) * 32
-          setProgress(pct)
-        },
-        abort.signal,
-      )
-
-      if (cancelled || abort.signal.aborted) return
-
-      if (result.loaded === 0) {
-        setLocalError('No pudimos cargar ninguna miniatura. Verificá la conexión e intentá de nuevo.')
-        setPhase('error')
-        return
-      }
-
-      setThumbnailsReady(true)
-      setProgress(62)
-      setPhase('comparing')
-      setStatusLine('Validando referencia...')
-      await new Promise((r) => setTimeout(r, 400))
-      if (cancelled || abort.signal.aborted) return
-
-      setStatusLine('Buscando coincidencias...')
-      const compareResult = await compareAlbumToReference(
-        referenceToken,
-        album.images,
-        ({ compared, total, matched }) => {
-          if (cancelled || abort.signal.aborted) return
-          setCompareDone(compared)
-          setCompareTotal(total)
-          setMatchCount(matched)
-          setStatusLine(`Comparando fotos ${compared}/${total}`)
-          const pct = 62 + (compared / total) * 36
-          setProgress(pct)
-        },
-      )
-
-      if (cancelled || abort.signal.aborted) return
-
-      if (!compareResult.ok) {
-        setLocalError(compareResult.message)
-        setPhase('error')
-        return
-      }
-
-      setMatchCount(compareResult.result.matchedImageIds.length)
-      setProgress(100)
-      setPhase('ready')
-      setStatusLine('Preparando resultados...')
-      setTimeout(() => onComplete(compareResult.result), 400)
     }
 
     void run()
@@ -214,12 +245,16 @@ function AlbumProcessingScreen({
     return () => {
       cancelled = true
       abort.abort()
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
     }
-  }, [albumUrl, fetchAlbum, onComplete, referenceToken, setThumbnailsReady])
+  }, [albumUrl, referenceToken, provider])
 
-  if (phase === 'error' && (error || localError)) {
-    const message = localError ?? (error ? getDriveErrorMessage(error) : '')
+  if (phase === 'error') {
+    const friendly = PROVIDER_FETCH_ERROR[provider]
+    const technical = localError ?? (error ? `${error.code}: ${error.message}` : null)
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -232,7 +267,15 @@ function AlbumProcessingScreen({
               <AlertTriangle className="w-8 h-8 text-red-400" />
             </div>
             <h2 className="font-display text-2xl font-bold mb-2">No pudimos completar el análisis</h2>
-            <ErrorBanner message={message} className="mb-6 text-left" />
+            <ErrorBanner message={friendly} className="mb-3 text-left" />
+            {technical && (
+              <p className={`text-left text-xs font-mono mb-6 ${import.meta.env.DEV ? 'text-amber-200/80' : 'text-text-muted'}`}>
+                {import.meta.env.DEV ? technical : getDriveErrorMessage(error ?? { code: 'UNKNOWN_ERROR', message: technical })}
+              </p>
+            )}
+            {!technical && error && (
+              <p className="text-sm text-text-muted mb-6 text-left">{getDriveErrorMessage(error)}</p>
+            )}
             <Button variant="primary" className="w-full" onClick={onError}>
               Volver al inicio
             </Button>

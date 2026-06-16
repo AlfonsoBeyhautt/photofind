@@ -55,6 +55,14 @@ const MESSAGES: Record<DriveErrorCode, string> = {
     'El transfer de WeTransfer aún no está listo para descargar. Probá de nuevo en unos minutos.',
   WETRANSFER_FETCH_FAILED:
     'No pudimos leer el transfer de WeTransfer.',
+  API_ROUTE_FAILED:
+    'No pudimos conectar con el servidor del álbum.',
+  TIMEOUT:
+    'La lectura del álbum tardó demasiado. Intentá de nuevo.',
+  INVALID_JSON_RESPONSE:
+    'El servidor respondió de forma inesperada al leer el álbum.',
+  GOOGLE_DRIVE_API_ERROR:
+    'Google Drive rechazó la solicitud. Verificá que la carpeta sea pública.',
 }
 
 export function driveError(code: DriveErrorCode, message?: string): DriveError {

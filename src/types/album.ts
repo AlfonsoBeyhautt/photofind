@@ -30,6 +30,10 @@ export type DriveErrorCode =
   | 'WETRANSFER_NO_IMAGES'
   | 'WETRANSFER_NOT_READY'
   | 'WETRANSFER_FETCH_FAILED'
+  | 'API_ROUTE_FAILED'
+  | 'TIMEOUT'
+  | 'INVALID_JSON_RESPONSE'
+  | 'GOOGLE_DRIVE_API_ERROR'
 
 export interface AlbumImage {
   id: string

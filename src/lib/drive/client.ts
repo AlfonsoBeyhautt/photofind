@@ -1,24 +1,15 @@
 import type { FetchAlbumResponse } from '../../types/album'
-import { driveError } from './errors'
+import { postAlbumJson } from '../providers/albumApiFetch'
 
 export async function fetchDriveFolder(url: string): Promise<FetchAlbumResponse> {
-  try {
-    const res = await fetch('/api/drive/folder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    })
-
-    const data = (await res.json()) as FetchAlbumResponse
-
-    if (!data.ok && !data.error) {
-      return { ok: false, error: driveError('UNKNOWN_ERROR') }
-    }
-
-    return data
-  } catch {
-    return { ok: false, error: driveError('UNKNOWN_ERROR') }
+  console.log('[PhotoFind:Drive] fetch_start', { urlLength: url.length })
+  const result = await postAlbumJson('/api/drive/folder', { url }, { logLabel: 'drive/folder' })
+  if (result.ok) {
+    console.log('[PhotoFind:Drive] fetch_success', { images: result.album.totalImages })
+  } else {
+    console.error('[PhotoFind:Drive] fetch_error', result.error)
   }
+  return result
 }
 
 /**

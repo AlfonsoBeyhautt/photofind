@@ -23,7 +23,7 @@ interface AlbumContextType {
   setAlbumUrl: (url: string) => void
   setThumbnailsReady: (ready: boolean) => void
   validateUrl: (url: string) => DriveError | null
-  fetchAlbum: (url?: string) => Promise<AlbumData | null>
+  fetchAlbum: (url?: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
   resetAlbum: () => void
 }
 
@@ -93,18 +93,24 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     return null
   }, [])
 
-  const fetchAlbum = useCallback(async (url?: string): Promise<AlbumData | null> => {
+  const fetchAlbum = useCallback(async (url?: string): Promise<{ album: AlbumData | null; error: DriveError | null }> => {
     const targetUrl = url ?? albumUrl
+    const detected = detectProviderFromUrl(targetUrl)
+    console.log('[PhotoFind:Processing] fetch_album_start', { provider: detected, urlLength: targetUrl.length })
+
     const validationError = validateUrl(targetUrl)
     if (validationError) {
+      console.error('[PhotoFind:Processing] fetch_album_error', { stage: 'validation', code: validationError.code })
       setError(validationError)
       setAlbum(null)
-      return null
+      return { album: null, error: validationError }
     }
 
-    const detected = detectProviderFromUrl(targetUrl)
     if (!FETCHABLE_PROVIDERS.has(detected)) {
-      return null
+      const notReady = driveError('PROVIDER_NOT_READY')
+      setError(notReady)
+      setAlbum(null)
+      return { album: null, error: notReady }
     }
 
     setIsLoading(true)
@@ -112,20 +118,26 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
 
     try {
       const source = buildAlbumSource(targetUrl, detected)
+      console.log('[PhotoFind:Album] provider_detected', { provider: source.provider })
       const result = await fetchAlbumByProvider(source)
       if (result.ok) {
         setAlbum(result.album)
         setAlbumUrlState(targetUrl)
         setProvider(detected)
-        return result.album
+        console.log('[PhotoFind:Processing] fetch_album_done', { images: result.album.totalImages })
+        return { album: result.album, error: null }
       }
+      console.error('[PhotoFind:Processing] fetch_album_error', result.error)
       setError(result.error)
       setAlbum(null)
-      return null
-    } catch {
-      setError(driveError('UNKNOWN_ERROR'))
+      return { album: null, error: result.error }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[PhotoFind:Processing] fetch_album_error', { stage: 'exception', message })
+      const fetchError = driveError('UNKNOWN_ERROR', import.meta.env.DEV ? message : undefined)
+      setError(fetchError)
       setAlbum(null)
-      return null
+      return { album: null, error: fetchError }
     } finally {
       setIsLoading(false)
     }
