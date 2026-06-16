@@ -12,6 +12,7 @@ export interface FacialProfileMeta {
   qualityTier: ReferenceQualityTier
   qualityWarning?: string
   source: ReferenceSource
+  createdAt: string
   updatedAt: string
 }
 
@@ -36,6 +37,7 @@ function rowToMeta(row: FacialProfileRow): FacialProfileMeta {
     qualityTier: row.quality_tier,
     qualityWarning: row.quality_warning ?? undefined,
     source: row.source,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }

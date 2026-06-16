@@ -9,6 +9,8 @@ import { ProcessingScreen } from '../components/flow/ProcessingScreen'
 import { ResultsScreen } from '../components/flow/ResultsScreen'
 import { PremiumSection } from '../components/flow/PremiumSection'
 import { useAlbum } from '../context/AlbumContext'
+import { useAuth } from '../context/AuthContext'
+import { recordSearch } from '../lib/auth/authClient'
 import type { RecognitionSearchResult } from '../types/recognition'
 
 type FlowStep = 'hero' | 'person' | 'processing' | 'results'
@@ -19,6 +21,7 @@ type FlowData = PersonContinueData & {
 
 export function HomePage() {
   const { album, thumbnailsReady, setAlbumUrl, resetAlbum } = useAlbum()
+  const { isLoggedIn } = useAuth()
   const [step, setStep] = useState<FlowStep>('hero')
   const [flowData, setFlowData] = useState<FlowData | null>(null)
   const [searchResult, setSearchResult] = useState<RecognitionSearchResult | null>(null)
@@ -46,7 +49,18 @@ export function HomePage() {
   const handleProcessingComplete = useCallback((result: RecognitionSearchResult) => {
     setSearchResult(result)
     setStep('results')
-  }, [])
+
+    if (isLoggedIn && album && flowData) {
+      void recordSearch({
+        albumName: album.folderName,
+        albumUrl: flowData.albumUrl,
+        provider: album.source,
+        eventCategory: flowData.category,
+        photosFound: result.matchedImageIds.length,
+        totalPhotos: result.albumTotal,
+      })
+    }
+  }, [isLoggedIn, album, flowData])
 
   const handleProcessingError = useCallback(() => {
     setStep('hero')

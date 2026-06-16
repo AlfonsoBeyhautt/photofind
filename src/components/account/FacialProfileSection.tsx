@@ -55,6 +55,8 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
           <div>
             <p className="text-sm text-emerald-400 font-medium">Perfil facial guardado</p>
             <p className="text-xs text-text-dim mt-1">
+              Creado {new Date(facialProfile.createdAt).toLocaleDateString('es-AR')}
+              {' · '}
               Actualizado {new Date(facialProfile.updatedAt).toLocaleDateString('es-AR')}
             </p>
             {facialProfile.qualityWarning && (
@@ -79,7 +81,7 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
             setEditing(false)
             setError(null)
           }}
-          onError={setError}
+          onError={(msg) => setError(msg || null)}
           onCancel={facialProfile.hasProfile ? () => setEditing(false) : undefined}
         />
       )}

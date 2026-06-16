@@ -26,6 +26,12 @@ Esto crea:
 - Tabla `public.facial_profiles` con RLS
 - Bucket privado `facial-profiles` con políticas por usuario
 
+Luego ejecutá también:
+
+`supabase/migrations/002_search_history.sql`
+
+Esto crea la tabla `public.search_history` para búsquedas y álbumes procesados en el dashboard.
+
 ## 4. Auth (registro sin confirmación de email — recomendado para MVP)
 
 **Authentication → Providers → Email** → desactivá **Confirm email** si querés login inmediato tras registrarse.

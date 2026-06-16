@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Calendar, Crown, LogOut } from 'lucide-react'
+import { Calendar, LogOut, LayoutDashboard } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { GlowOrbs } from '../components/effects/GlowOrbs'
 import { Button } from '../components/ui/Button'
@@ -34,20 +34,20 @@ export function ProfilePage() {
                 {user?.name}
               </h1>
               <p className="text-text-muted mb-3">{user?.email}</p>
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                {user?.createdAt && (
-                  <Badge variant="accent">
-                    <Calendar className="w-3 h-3 mr-1" />
-                    Miembro desde {formatMemberSince(user.createdAt)}
-                  </Badge>
-                )}
-                <Badge variant="violet">
-                  <Crown className="w-3 h-3 mr-1" />
-                  Plan gratuito
+              {user?.createdAt && (
+                <Badge variant="accent">
+                  <Calendar className="w-3 h-3 mr-1" />
+                  Miembro desde {formatMemberSince(user.createdAt)}
                 </Badge>
-              </div>
+              )}
             </div>
             <div className="flex flex-col gap-2">
+              <Link to="/dashboard">
+                <Button variant="outline" size="sm">
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Button>
+              </Link>
               <Link to="/">
                 <Button variant="primary" size="sm">Nueva búsqueda</Button>
               </Link>

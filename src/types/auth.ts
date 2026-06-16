@@ -14,6 +14,7 @@ export interface FacialProfileMeta {
   qualityTier: ReferenceQualityTier
   qualityWarning?: string
   source: ReferenceSource
+  createdAt: string
   updatedAt: string
 }
 
@@ -51,3 +52,40 @@ export interface UseFacialProfileSuccess {
 }
 
 export type UseFacialProfileResponse = UseFacialProfileSuccess | AuthErrorResponse
+
+export interface SearchHistoryItem {
+  id: string
+  albumName: string
+  albumUrl: string
+  provider: string
+  eventCategory: string
+  photosFound: number
+  totalPhotos: number | null
+  createdAt: string
+}
+
+export interface ProcessedAlbumItem {
+  albumName: string
+  albumUrl: string
+  provider: string
+  totalPhotos: number | null
+  lastSearchedAt: string
+  searchCount: number
+}
+
+export interface DashboardData {
+  ok: true
+  user: AuthUser
+  facialProfile: FacialProfileState
+  recentSearches: SearchHistoryItem[]
+  processedAlbums: ProcessedAlbumItem[]
+}
+
+export interface RecordSearchBody {
+  albumName: string
+  albumUrl: string
+  provider: string
+  eventCategory: string
+  photosFound: number
+  totalPhotos?: number | null
+}

@@ -29,8 +29,10 @@ import { handleCompareAlbumRequest } from './recognize/compareSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import {
   handleDeleteFacialProfileRequest,
+  handleDashboardRequest,
   handleGetFacialProfileRequest,
   handleMeRequest,
+  handleRecordSearchRequest,
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
 } from './auth/authHandler'
@@ -65,6 +67,14 @@ export function driveApiPlugin(): Plugin {
 
             if (req.url.startsWith('/api/auth/me') && req.method === 'GET') {
               await handleMeRequest(req, res)
+              return
+            }
+            if (req.url.startsWith('/api/auth/dashboard') && req.method === 'GET') {
+              await handleDashboardRequest(req, res)
+              return
+            }
+            if (req.url.startsWith('/api/auth/search-history') && req.method === 'POST') {
+              await handleRecordSearchRequest(req, res, body)
               return
             }
             if (req.url.startsWith('/api/auth/facial-profile/use') && req.method === 'POST') {

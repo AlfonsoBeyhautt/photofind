@@ -21,13 +21,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function GuestRoute({ children }: { children: React.ReactNode }) {
+  const { isLoggedIn, loading } = useAuth()
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-text-muted">
+        Cargando…
+      </div>
+    )
+  }
+  if (isLoggedIn) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/registro" element={<RegisterPage />} />
-      <Route path="/recuperar" element={<ForgotPasswordPage />} />
+      <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+      <Route path="/registro" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+      <Route path="/recuperar" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
       <Route
         path="/dashboard"
         element={

@@ -153,13 +153,37 @@ function ProfileUploadFlow({ onSaved, onError }: FacialProfileSetupProps) {
 function ProfileCameraFlow({ onSaved, onError }: FacialProfileSetupProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const [cameraKey, setCameraKey] = useState(0)
   const [ready, setReady] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [cameraError, setCameraError] = useState(false)
   const [selection, setSelection] = useState<{ detectionToken: string; faces: DetectedFace[]; previewUrl: string } | null>(null)
 
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    setReady(false)
+  }, [])
+
   useEffect(() => {
+    if (selection) {
+      stopCamera()
+      return
+    }
+
     let cancelled = false
+    const video = videoRef.current
+
+    const markReady = () => {
+      const el = videoRef.current
+      if (el && el.videoWidth > 0 && el.videoHeight > 0) {
+        setReady(true)
+      }
+    }
+
     async function start() {
+      setReady(false)
+      setCameraError(false)
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -170,28 +194,42 @@ function ProfileCameraFlow({ onSaved, onError }: FacialProfileSetupProps) {
           return
         }
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play()
-          setReady(true)
+        const el = videoRef.current
+        if (el) {
+          el.srcObject = stream
+          el.addEventListener('loadedmetadata', markReady)
+          await el.play()
+          markReady()
         }
       } catch {
-        onError('No pudimos acceder a la cámara.')
+        setCameraError(true)
+        onError('No pudimos acceder a la cámara. Revisá los permisos del navegador.')
       }
     }
+
     void start()
+
     return () => {
       cancelled = true
-      streamRef.current?.getTracks().forEach((t) => t.stop())
+      video?.removeEventListener('loadedmetadata', markReady)
+      stopCamera()
     }
-  }, [onError])
+  }, [cameraKey, onError, selection, stopCamera])
 
   const capture = async () => {
-    if (!videoRef.current || loading) return
+    const video = videoRef.current
+    if (!video || loading) return
+
+    if (!video.videoWidth || !video.videoHeight) {
+      onError('La cámara todavía no está lista. Esperá un momento e intentá de nuevo.')
+      return
+    }
+
     setLoading(true)
     onError('')
+
     try {
-      const blob = await captureVideoFrameToJpeg(videoRef.current)
+      const blob = await captureVideoFrameToJpeg(video)
       const previewUrl = URL.createObjectURL(blob)
       const dataBase64 = await blobToBase64(blob)
       const result = await saveFacialProfileFromImage(dataBase64, 'image/jpeg', 'camera')
@@ -204,7 +242,7 @@ function ProfileCameraFlow({ onSaved, onError }: FacialProfileSetupProps) {
 
       if ('needsSelection' in result && result.needsSelection) {
         setSelection({ detectionToken: result.detectionToken, faces: result.faces, previewUrl })
-        streamRef.current?.getTracks().forEach((t) => t.stop())
+        stopCamera()
         return
       }
 
@@ -212,8 +250,11 @@ function ProfileCameraFlow({ onSaved, onError }: FacialProfileSetupProps) {
         URL.revokeObjectURL(previewUrl)
         onSaved(result.profile)
       }
-    } catch {
-      onError('No pudimos capturar la selfie.')
+    } catch (err) {
+      const message = err instanceof Error && err.message === 'CAMERA_NOT_READY'
+        ? 'La cámara todavía no está lista. Esperá un momento e intentá de nuevo.'
+        : 'No pudimos capturar la selfie. Probá de nuevo.'
+      onError(message)
     } finally {
       setLoading(false)
     }
@@ -237,17 +278,28 @@ function ProfileCameraFlow({ onSaved, onError }: FacialProfileSetupProps) {
   return (
     <div className="space-y-3">
       <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3] max-h-[280px]">
-        <video ref={videoRef} playsInline muted className="w-full h-full object-cover mirror" />
-        {!ready && (
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className={cn('w-full h-full object-cover scale-x-[-1]', !ready && 'opacity-0')}
+        />
+        {!ready && !cameraError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <Loader2 className="w-8 h-8 animate-spin text-white" />
           </div>
         )}
       </div>
-      <Button onClick={capture} disabled={!ready || loading} className="w-full">
+      <Button onClick={() => void capture()} disabled={!ready || loading} className="w-full">
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-        Sacar selfie
+        {loading ? 'Guardando…' : 'Sacar selfie'}
       </Button>
+      {cameraError && (
+        <Button variant="outline" size="sm" className="w-full" onClick={() => setCameraKey((k) => k + 1)}>
+          <RefreshCw className="w-4 h-4" />
+          Reintentar cámara
+        </Button>
+      )}
     </div>
   )
 }

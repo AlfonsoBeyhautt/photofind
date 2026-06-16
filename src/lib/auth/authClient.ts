@@ -1,7 +1,9 @@
 import type {
   AuthMeResponse,
+  DashboardData,
   FacialProfileMeta,
   FacialProfileState,
+  RecordSearchBody,
   UseFacialProfileResponse,
 } from '../../types/auth'
 import type { DetectedFace, ReferenceSource } from '../../types/recognition'
@@ -178,6 +180,60 @@ export async function saveFacialProfileFromSelection(
     method: 'POST',
     body: JSON.stringify({ detectionToken, faceIndex }),
   })
+}
+
+export async function fetchDashboard(): Promise<DashboardData | { ok: false; error: { code: string; message: string } }> {
+  return authFetch('/api/auth/dashboard')
+}
+
+export async function recordSearch(data: RecordSearchBody): Promise<void> {
+  try {
+    await authFetch('/api/auth/search-history', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  } catch {
+    // No bloquear el flujo de búsqueda si falla el guardado del historial
+    console.warn('[PhotoFind] No se pudo guardar la búsqueda en el historial.')
+  }
+}
+
+export function formatSearchDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('es-AR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return iso
+  }
+}
+
+export function formatRelativeTime(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime()
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 1) return 'Hace un momento'
+    if (minutes < 60) return `Hace ${minutes} min`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `Hace ${hours} h`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `Hace ${days} día${days === 1 ? '' : 's'}`
+    return formatSearchDate(iso)
+  } catch {
+    return iso
+  }
+}
+
+export function providerLabel(provider: string): string {
+  const labels: Record<string, string> = {
+    'google-drive': 'Google Drive',
+    dropbox: 'Dropbox',
+    pixieset: 'Pixieset',
+    wetransfer: 'WeTransfer',
+  }
+  return labels[provider] ?? provider
 }
 
 export function userAvatarUrl(userId: string): string {

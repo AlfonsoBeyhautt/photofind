@@ -8,6 +8,11 @@ import {
   useFacialProfileForSearch,
   type SaveFacialProfileBody,
 } from './facialProfileService'
+import {
+  buildProcessedAlbums,
+  listRecentSearches,
+  recordSearch,
+} from '../supabase/searchHistoryStore'
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.statusCode = status
@@ -90,4 +95,75 @@ export async function handleUseFacialProfileRequest(req: IncomingMessage, res: S
 
   const result = await useFacialProfileForSearch(user.id)
   sendJson(res, result.ok ? 200 : 404, result)
+}
+
+interface RecordSearchBody {
+  albumName?: string
+  albumUrl?: string
+  provider?: string
+  eventCategory?: string
+  photosFound?: number
+  totalPhotos?: number | null
+}
+
+export async function handleRecordSearchRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  rawBody: string,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  let body: RecordSearchBody
+  try {
+    body = JSON.parse(rawBody) as RecordSearchBody
+  } catch {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Solicitud inválida.' } })
+    return
+  }
+
+  const albumName = body.albumName?.trim()
+  const albumUrl = body.albumUrl?.trim()
+  const provider = body.provider?.trim()
+  const eventCategory = body.eventCategory?.trim()
+
+  if (!albumName || !albumUrl || !provider || !eventCategory || typeof body.photosFound !== 'number') {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Faltan datos de la búsqueda.' } })
+    return
+  }
+
+  try {
+    const item = await recordSearch(user.id, {
+      albumName,
+      albumUrl,
+      provider,
+      eventCategory,
+      photosFound: body.photosFound,
+      totalPhotos: body.totalPhotos,
+    })
+    sendJson(res, 201, { ok: true, search: item })
+  } catch {
+    sendJson(res, 500, { ok: false, error: { code: 'SEARCH_RECORD_FAILED', message: 'No pudimos guardar la búsqueda.' } })
+  }
+}
+
+export async function handleDashboardRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  try {
+    const facialProfile = await getUserFacialProfileMeta(user.id)
+    const recentSearches = await listRecentSearches(user.id, 20)
+    const processedAlbums = buildProcessedAlbums(recentSearches)
+
+    sendJson(res, 200, {
+      ok: true,
+      user,
+      facialProfile,
+      recentSearches,
+      processedAlbums,
+    })
+  } catch {
+    sendJson(res, 500, { ok: false, error: { code: 'DASHBOARD_FETCH_FAILED', message: 'No pudimos cargar el dashboard.' } })
+  }
 }

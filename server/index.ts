@@ -31,8 +31,10 @@ import { handleCompareAlbumRequest } from './recognize/compareSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import {
   handleDeleteFacialProfileRequest,
+  handleDashboardRequest,
   handleGetFacialProfileRequest,
   handleMeRequest,
+  handleRecordSearchRequest,
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
 } from './auth/authHandler'
@@ -202,6 +204,14 @@ app.post('/api/recognize/select-reference-face', async (req, res) => {
 
 app.get('/api/auth/me', async (req, res) => {
   await handleMeRequest(req, res)
+})
+
+app.get('/api/auth/dashboard', async (req, res) => {
+  await handleDashboardRequest(req, res)
+})
+
+app.post('/api/auth/search-history', async (req, res) => {
+  await handleRecordSearchRequest(req, res, JSON.stringify(req.body ?? {}))
 })
 
 app.get('/api/auth/facial-profile', async (req, res) => {
