@@ -187,6 +187,47 @@ export async function getEventCategoriesByUrlHashes(
   return result
 }
 
+export interface AlbumCollectionSummary {
+  status: string
+  indexedImages: number
+  totalImages: number
+  indexedFaces: number
+}
+
+export async function getCollectionSummariesByUrlHashes(
+  urlHashes: string[],
+): Promise<Map<string, AlbumCollectionSummary>> {
+  const result = new Map<string, AlbumCollectionSummary>()
+  if (urlHashes.length === 0) return result
+
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return result
+
+  const unique = [...new Set(urlHashes.filter(Boolean))]
+  const { data, error } = await admin.client
+    .from('album_collections')
+    .select('album_url_hash, status, indexed_images, total_images, indexed_faces')
+    .in('album_url_hash', unique)
+
+  if (error) {
+    console.error('[PhotoFind:Collections] get_summaries', error.message)
+    return result
+  }
+
+  for (const row of data ?? []) {
+    const hash = row.album_url_hash as string | null
+    if (!hash) continue
+    result.set(hash, {
+      status: row.status as string,
+      indexedImages: row.indexed_images as number,
+      totalImages: row.total_images as number,
+      indexedFaces: row.indexed_faces as number,
+    })
+  }
+
+  return result
+}
+
 export async function createAlbumCollection(input: {
   albumFingerprint: string
   provider: string

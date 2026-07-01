@@ -55,6 +55,8 @@ import {
   handleGetFacialProfileRequest,
   handleMeRequest,
   handleRecordSearchRequest,
+  handleDeleteSearchHistoryRequest,
+  handleDeleteAlbumSearchHistoryRequest,
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
 } from './auth/authHandler'
@@ -434,6 +436,16 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   app.post('/api/auth/search-history', async (req, res) => {
     await handleRecordSearchRequest(req, res, JSON.stringify(req.body ?? {}))
+  })
+
+  app.delete('/api/auth/search-history/album', async (req, res) => {
+    const albumUrl = typeof req.query.albumUrl === 'string' ? req.query.albumUrl : ''
+    await handleDeleteAlbumSearchHistoryRequest(req, res, albumUrl)
+  })
+
+  app.delete('/api/auth/search-history/:searchId', async (req, res) => {
+    const searchId = typeof req.params.searchId === 'string' ? req.params.searchId : ''
+    await handleDeleteSearchHistoryRequest(req, res, searchId)
   })
 
   app.get('/api/auth/facial-profile', async (req, res) => {

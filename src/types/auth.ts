@@ -63,6 +63,9 @@ export interface SearchHistoryItem {
   eventCategory: string | null
   photosFound: number
   totalPhotos: number | null
+  matchedImageIds: string[] | null
+  analyzedCount: number | null
+  searchMethod: string | null
   createdAt: string
 }
 
@@ -74,6 +77,17 @@ export interface ProcessedAlbumItem {
   lastSearchedAt: string
   searchCount: number
   eventCategory: string | null
+  latestSearchId: string | null
+  latestMatchedImageIds: string[] | null
+}
+
+export interface DashboardAlbumContext {
+  collectionStatus: 'none' | 'pending' | 'processing' | 'ready' | 'failed'
+  indexedImages: number
+  totalImages: number
+  indexedFaces: number
+  activeJobId: string | null
+  activeJobStatus: string | null
 }
 
 export type ActiveAlbumJobStatus = 'pending' | 'processing' | 'retrying' | 'ready' | 'failed'
@@ -99,6 +113,7 @@ export interface DashboardData {
   recentSearches: SearchHistoryItem[]
   processedAlbums: ProcessedAlbumItem[]
   activeAlbumJobs: ActiveAlbumJobItem[]
+  albumContexts?: Record<string, DashboardAlbumContext>
   /** Solo presente cuando el backend confirma administrador autorizado. */
   operatorAccess?: true
 }
@@ -110,4 +125,7 @@ export interface RecordSearchBody {
   eventCategory?: string | null
   photosFound: number
   totalPhotos?: number | null
+  matchedImageIds?: string[]
+  analyzedCount?: number
+  searchMethod?: string | null
 }

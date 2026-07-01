@@ -14,9 +14,13 @@ import { useAuth } from '../context/AuthContext'
 import { recordSearch } from '../lib/auth/authClient'
 import { resetAllProcessingRuns } from '../lib/processing/processingRunGuard'
 import type { EventCategory } from '../lib/eventCategories'
+import type {
+  DashboardStartSearchState,
+  DashboardViewResultsState,
+} from '../lib/dashboard/dashboardNavigation'
 
 import type { ResumeAlbumJobState } from '../lib/recognition/activeAlbumJobs'
-import type { RecognitionSearchResult } from '../types/recognition'
+import type { RecognitionSearchResult, RecognitionSearchMethod } from '../types/recognition'
 
 type FlowStep = 'hero' | 'person' | 'processing' | 'results'
 
@@ -27,7 +31,7 @@ type FlowData = PersonContinueData & {
 }
 
 export function HomePage() {
-  const { album, thumbnailsReady, setAlbumUrl, resetAlbum } = useAlbum()
+  const { album, thumbnailsReady, setAlbumUrl, setThumbnailsReady, fetchAlbum, resetAlbum } = useAlbum()
   const { isLoggedIn, user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -52,6 +56,83 @@ export function HomePage() {
     setStep('processing')
     navigate(location.pathname, { replace: true, state: null })
   }, [location.state, location.pathname, navigate, setAlbumUrl])
+
+  useEffect(() => {
+    const start = (location.state as { startSearch?: DashboardStartSearchState } | null)?.startSearch
+    if (!start?.albumUrl) return
+
+    setAlbumUrl(start.albumUrl)
+    setSearchResult(null)
+    setInitialRetry(false)
+
+    if (start.mode === 'group') {
+      setFlowData({
+        albumUrl: start.albumUrl,
+        method: 'upload',
+        category: (start.eventCategory ?? null) as EventCategory | null,
+        referenceToken: '',
+        faceBox: { left: 0, top: 0, width: 0, height: 0 },
+        flowMode: 'group',
+      })
+      setStep('processing')
+    } else {
+      setFlowData({
+        albumUrl: start.albumUrl,
+        method: 'upload',
+        category: (start.eventCategory ?? null) as EventCategory | null,
+        referenceToken: '',
+        faceBox: { left: 0, top: 0, width: 0, height: 0 },
+        flowMode: 'search',
+      })
+      setStep('person')
+    }
+
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, navigate, setAlbumUrl])
+
+  useEffect(() => {
+    const view = (location.state as { viewResults?: DashboardViewResultsState } | null)?.viewResults
+    if (!view?.albumUrl || !view.matchedImageIds?.length) return
+
+    let cancelled = false
+
+    const open = async () => {
+      setAlbumUrl(view.albumUrl)
+      setSearchResult(null)
+      setInitialRetry(false)
+      setFlowData({
+        albumUrl: view.albumUrl,
+        method: 'upload',
+        category: (view.eventCategory ?? null) as EventCategory | null,
+        referenceToken: '',
+        faceBox: { left: 0, top: 0, width: 0, height: 0 },
+        flowMode: 'search',
+      })
+
+      const { album: fetched, error } = await fetchAlbum(view.albumUrl)
+      if (cancelled) return
+      if (error || !fetched) {
+        setStep('person')
+        return
+      }
+
+      const method = (view.searchMethod === 'compare-fallback' ? 'compare-fallback' : 'collection') as RecognitionSearchMethod
+      setSearchResult({
+        matchedImageIds: view.matchedImageIds,
+        analyzedCount: view.analyzedCount ?? fetched.totalImages,
+        albumTotal: fetched.totalImages,
+        truncated: false,
+        collectionReused: true,
+        searchMethod: method,
+      })
+      setThumbnailsReady(true)
+      setStep('results')
+      navigate(location.pathname, { replace: true, state: null })
+    }
+
+    void open()
+    return () => { cancelled = true }
+  }, [location.state, location.pathname, navigate, setAlbumUrl, fetchAlbum, setThumbnailsReady])
 
   const handleAnalyze = useCallback((url: string, mode: AlbumFlowMode = 'search') => {
     setAlbumUrl(url)
@@ -100,6 +181,9 @@ export function HomePage() {
         ...(flowData.category ? { eventCategory: flowData.category } : {}),
         photosFound: result.matchedImageIds.length,
         totalPhotos: result.albumTotal,
+        matchedImageIds: result.matchedImageIds,
+        analyzedCount: result.analyzedCount,
+        searchMethod: result.searchMethod ?? null,
       })
     }
   }, [isLoggedIn, album, flowData])

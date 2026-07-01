@@ -323,6 +323,39 @@ export async function listResumableJobsForUser(
     })
 }
 
+export async function findActiveJobsByUrlHashesForUser(
+  userId: string,
+  urlHashes: string[],
+): Promise<Map<string, { jobId: string; status: string }>> {
+  const result = new Map<string, { jobId: string; status: string }>()
+  if (urlHashes.length === 0) return result
+
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return result
+
+  const unique = [...new Set(urlHashes.filter(Boolean))]
+  const { data, error } = await admin.client
+    .from('album_processing_jobs')
+    .select('id, status, album_url_hash')
+    .eq('user_id', userId)
+    .in('album_url_hash', unique)
+    .in('status', ACTIVE_STATUSES)
+    .order('updated_at', { ascending: false })
+
+  if (error) {
+    console.error('[PhotoFind:Jobs] find_active_by_hash', error.message)
+    return result
+  }
+
+  for (const row of data ?? []) {
+    const hash = row.album_url_hash as string | null
+    if (!hash || result.has(hash)) continue
+    result.set(hash, { jobId: row.id as string, status: row.status as string })
+  }
+
+  return result
+}
+
 export async function cancelAlbumProcessingJobForUser(
   jobId: string,
   userId: string,

@@ -12,11 +12,41 @@ export interface ClusterStateFace {
   confidence: number | null
   bboxArea: number
   parent: string
+  seedEligible?: boolean
+}
+
+export interface ClusteringRuntimeStats {
+  facesEligibleAsSeeds: number
+  facesDiscardedLowQuality: number
+  initialGroupCount?: number
+  mergeSearchFacesCalls?: number
+  groupsMerged?: number
 }
 
 export interface ClusterState {
   faces: ClusterStateFace[]
   nextSeedIndex: number
+  phase?: 'clustering' | 'merging'
+  seedQueue?: string[]
+  mergeQueue?: string[]
+  nextMergeIndex?: number
+  representativeFaceIds?: string[]
+  runtimeStats?: ClusteringRuntimeStats
+}
+
+export interface ClusteringStatsPayload {
+  algorithmVersion: string
+  initialGroups: number
+  finalGroups: number
+  visibleGroups: number
+  groupsMerged: number
+  lowConfidenceGroups: number
+  hiddenByMinPhotos: number
+  searchFacesCalls: number
+  mergeSearchFacesCalls: number
+  avgPhotosPerVisibleGroup: number
+  facesDiscardedLowQuality: number
+  facesEligibleAsSeeds: number
 }
 
 export interface PersonGroupingRow {
@@ -31,6 +61,7 @@ export interface PersonGroupingRow {
   min_photos_threshold: number
   min_quality_threshold: number | null
   cluster_state: ClusterState | null
+  clustering_stats: ClusteringStatsPayload | null
   started_at: string | null
   completed_at: string | null
   failed_at: string | null
@@ -297,6 +328,7 @@ export async function updatePersonGrouping(
     startedAt: string
     completedAt: string
     failedAt: string
+    clusteringStats: ClusteringStatsPayload | null
   }>,
 ): Promise<PersonGroupingRow | null> {
   const admin = tryGetSupabaseAdmin()
@@ -312,6 +344,7 @@ export async function updatePersonGrouping(
   if (update.startedAt !== undefined) patch.started_at = update.startedAt
   if (update.completedAt !== undefined) patch.completed_at = update.completedAt
   if (update.failedAt !== undefined) patch.failed_at = update.failedAt
+  if (update.clusteringStats !== undefined) patch.clustering_stats = update.clusteringStats
 
   const { data, error } = await admin.client
     .from('album_person_groupings')

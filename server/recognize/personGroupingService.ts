@@ -7,8 +7,16 @@ import {
 import {
   PERSON_GROUPING_ALGORITHM_VERSION,
   PERSON_GROUPING_MAX_FACE_MATCHES,
+  PERSON_GROUPING_MERGE_HIGH_CONFIDENCE,
+  PERSON_GROUPING_MERGE_MAX_SEARCHES,
+  PERSON_GROUPING_MERGE_REPRESENTATIVES,
+  PERSON_GROUPING_MERGE_SIMILARITY_THRESHOLD,
+  PERSON_GROUPING_MIN_GROUP_QUALITY_SCORE,
   PERSON_GROUPING_MIN_PHOTOS,
+  PERSON_GROUPING_MIN_SEED_BBOX_AREA,
+  PERSON_GROUPING_MIN_SEED_CONFIDENCE,
   PERSON_GROUPING_SEARCH_BATCH_SIZE,
+  SIMILARITY_THRESHOLD,
 } from './config'
 import { canUseRekognition, searchFaces } from './rekognitionClient'
 import {
@@ -31,6 +39,7 @@ import {
   listVisiblePersonGroups,
   type ClusterState,
   type ClusterStateFace,
+  type ClusteringStatsPayload,
   type IndexedFaceForGrouping,
   type PersonGroupRow,
   type PersonGroupingRow,
@@ -77,11 +86,6 @@ function devGrantMode(): 'off' | 'user_premium' | 'photographer_license' {
 function bboxArea(box: BoundingBox | null): number {
   if (!box?.Width || !box?.Height) return 0
   return box.Width * box.Height
-}
-
-function faceQualityScore(face: IndexedFaceForGrouping): number {
-  const conf = face.confidence ?? 50
-  return conf * Math.max(bboxArea(face.bounding_box), 0.001)
 }
 
 function rankFacesForAvatar(
@@ -137,6 +141,16 @@ function pickBestRepresentativeFace(
   return { imageId: best.imageId, faceId: best.faceId, crop: best.crop }
 }
 
+function isSeedEligible(face: IndexedFaceForGrouping): boolean {
+  const conf = face.confidence ?? 0
+  const area = bboxArea(face.bounding_box)
+  if (conf < PERSON_GROUPING_MIN_SEED_CONFIDENCE) return false
+  if (area < PERSON_GROUPING_MIN_SEED_BBOX_AREA) return false
+  const box = awsBoundingBoxToFaceBox(face.bounding_box)
+  if (box && !hasMinimumFaceBox(box)) return false
+  return true
+}
+
 function buildClusterState(faces: IndexedFaceForGrouping[]): ClusterState {
   const sorted = [...faces]
     .map((face) => ({
@@ -146,22 +160,94 @@ function buildClusterState(faces: IndexedFaceForGrouping[]): ClusterState {
       confidence: face.confidence,
       bboxArea: bboxArea(face.bounding_box),
       parent: face.face_id,
+      seedEligible: isSeedEligible(face),
     }))
-    .sort((a, b) => faceQualityScore({
-      face_id: b.faceId,
-      image_id: b.imageId,
-      image_name: b.imageName,
-      confidence: b.confidence,
-      bounding_box: { Width: b.bboxArea, Height: 1 },
-    }) - faceQualityScore({
-      face_id: a.faceId,
-      image_id: a.imageId,
-      image_name: a.imageName,
-      confidence: a.confidence,
-      bounding_box: { Width: a.bboxArea, Height: 1 },
-    }))
+    .sort((a, b) => {
+      const scoreA = (a.confidence ?? 0) * Math.max(a.bboxArea, 0.001)
+      const scoreB = (b.confidence ?? 0) * Math.max(b.bboxArea, 0.001)
+      return scoreB - scoreA
+    })
 
-  return { faces: sorted, nextSeedIndex: 0 }
+  const seedQueue = sorted.filter((f) => f.seedEligible).map((f) => f.faceId)
+  const facesDiscardedLowQuality = sorted.length - seedQueue.length
+
+  return {
+    faces: sorted,
+    nextSeedIndex: 0,
+    phase: 'clustering',
+    seedQueue,
+    mergeQueue: [],
+    nextMergeIndex: 0,
+    representativeFaceIds: [],
+    runtimeStats: {
+      facesEligibleAsSeeds: seedQueue.length,
+      facesDiscardedLowQuality,
+      groupsMerged: 0,
+      mergeSearchFacesCalls: 0,
+    },
+  }
+}
+
+function getComponents(faces: ClusterStateFace[]): ClusterStateFace[][] {
+  const components = new Map<string, ClusterStateFace[]>()
+  for (const face of faces) {
+    const root = findRoot(faces, face.faceId)
+    const list = components.get(root) ?? []
+    list.push(face)
+    components.set(root, list)
+  }
+  return [...components.values()]
+}
+
+function buildRepresentativeFaceIds(
+  components: ClusterStateFace[][],
+  bboxByFace: Map<string, BoundingBox | null | undefined>,
+  confidenceByFace: Map<string, number | null | undefined>,
+): string[] {
+  const repIds = new Set<string>()
+  for (const comp of components) {
+    const ranked = rankFacesForAvatar(comp, bboxByFace, confidenceByFace, PERSON_GROUPING_MERGE_REPRESENTATIVES)
+    for (const item of ranked) {
+      repIds.add(item.faceId)
+    }
+  }
+  return [...repIds]
+}
+
+function beginMergePhase(
+  state: ClusterState,
+  bboxByFace: Map<string, BoundingBox | null | undefined>,
+  confidenceByFace: Map<string, number | null | undefined>,
+): void {
+  const components = getComponents(state.faces)
+  if (!state.runtimeStats) {
+    state.runtimeStats = {
+      facesEligibleAsSeeds: state.seedQueue?.length ?? 0,
+      facesDiscardedLowQuality: 0,
+      groupsMerged: 0,
+      mergeSearchFacesCalls: 0,
+    }
+  }
+  state.runtimeStats.initialGroupCount = components.length
+
+  const repIds = buildRepresentativeFaceIds(components, bboxByFace, confidenceByFace)
+  state.representativeFaceIds = repIds
+  state.mergeQueue = repIds.slice(0, PERSON_GROUPING_MERGE_MAX_SEARCHES)
+  state.nextMergeIndex = 0
+  state.phase = 'merging'
+  state.nextSeedIndex = state.seedQueue?.length ?? 0
+}
+
+function shouldMergeGroups(
+  similarity: number,
+  matchedFaceId: string,
+  representativeFaceIds: Set<string>,
+): boolean {
+  if (similarity >= PERSON_GROUPING_MERGE_HIGH_CONFIDENCE) return true
+  if (similarity >= PERSON_GROUPING_MERGE_SIMILARITY_THRESHOLD && representativeFaceIds.has(matchedFaceId)) {
+    return true
+  }
+  return false
 }
 
 function findRoot(faces: ClusterStateFace[], faceId: string): string {
@@ -298,8 +384,17 @@ function statusMessage(row: PersonGroupingRow): string {
 function progressPercent(row: PersonGroupingRow, state: ClusterState | null): number {
   if (row.status === 'ready') return 100
   if (!state || state.faces.length === 0) return 0
-  const totalSeeds = state.faces.length
-  return Math.min(99, Math.round((state.nextSeedIndex / totalSeeds) * 100))
+
+  if (state.phase === 'merging') {
+    const total = state.mergeQueue?.length ?? 0
+    const done = state.nextMergeIndex ?? 0
+    if (total === 0) return 95
+    return Math.min(99, 70 + Math.round((done / total) * 29))
+  }
+
+  const totalSeeds = state.seedQueue?.length ?? state.faces.length
+  if (totalSeeds === 0) return 0
+  return Math.min(69, Math.round(((state.nextSeedIndex ?? 0) / totalSeeds) * 69))
 }
 
 function toPublicGroups(
@@ -411,20 +506,16 @@ async function finalizeGrouping(
   collection: AlbumCollectionRow,
   state: ClusterState,
 ): Promise<PersonGroupingRow | null> {
-  const components = new Map<string, ClusterStateFace[]>()
-  for (const face of state.faces) {
-    const root = findRoot(state.faces, face.faceId)
-    const list = components.get(root) ?? []
-    list.push(face)
-    components.set(root, list)
-  }
+  const components = getComponents(state.faces)
+  const initialGroups = state.runtimeStats?.initialGroupCount ?? components.length
+  const groupsMerged = state.runtimeStats?.groupsMerged ?? 0
 
   const minPhotos = row.min_photos_threshold ?? PERSON_GROUPING_MIN_PHOTOS
   const indexedFaces = await listIndexedFacesForGrouping(collection.id)
   const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
   const confidenceByFace = new Map(indexedFaces.map((f) => [f.face_id, f.confidence]))
 
-  const rawGroups = [...components.values()]
+  const rawGroups = components
     .map((faces) => {
       const imageMap = new Map<string, number>()
       for (const face of faces) {
@@ -434,21 +525,30 @@ async function finalizeGrouping(
       }
       const rep = pickBestRepresentativeFace(faces, bboxByFace, confidenceByFace)
       const repCluster = faces.find((f) => f.faceId === rep.faceId)
+      const qualityScore = (repCluster?.confidence ?? 0) * Math.max(repCluster?.bboxArea ?? 0.001, 0.001)
       return {
         faces,
         imageMap,
         representative: rep,
         photoCount: imageMap.size,
-        qualityScore: (repCluster?.confidence ?? 0) * Math.max(repCluster?.bboxArea ?? 0.001, 0.001),
+        qualityScore,
       }
     })
     .sort((a, b) => b.photoCount - a.photoCount)
 
   await deletePersonGroupArtifacts(row.id)
 
+  let lowConfidenceGroups = 0
+  let hiddenByMinPhotos = 0
+
   const groupsToInsert = rawGroups.map((g, index) => {
     const repFace = g.representative
-    const isVisible = g.photoCount >= minPhotos
+    const meetsMinPhotos = g.photoCount >= minPhotos
+    const meetsQuality = g.qualityScore >= PERSON_GROUPING_MIN_GROUP_QUALITY_SCORE
+    const isVisible = meetsMinPhotos && meetsQuality
+    if (!meetsMinPhotos) hiddenByMinPhotos += 1
+    else if (!meetsQuality) lowConfidenceGroups += 1
+
     return {
       personIndex: index + 1,
       photoCount: g.photoCount,
@@ -472,12 +572,35 @@ async function finalizeGrouping(
   await insertPersonGroups(row.id, collection.id, groupsToInsert)
 
   const visibleCount = groupsToInsert.filter((g) => g.isVisible).length
+  const visiblePhotoTotals = groupsToInsert.filter((g) => g.isVisible)
+  const avgPhotosPerVisibleGroup = visibleCount > 0
+    ? Math.round((visiblePhotoTotals.reduce((sum, g) => sum + g.photoCount, 0) / visibleCount) * 10) / 10
+    : 0
+
+  const clusteringStats: ClusteringStatsPayload = {
+    algorithmVersion: PERSON_GROUPING_ALGORITHM_VERSION,
+    initialGroups,
+    finalGroups: groupsToInsert.length,
+    visibleGroups: visibleCount,
+    groupsMerged,
+    lowConfidenceGroups,
+    hiddenByMinPhotos,
+    searchFacesCalls: row.search_faces_calls,
+    mergeSearchFacesCalls: state.runtimeStats?.mergeSearchFacesCalls ?? 0,
+    avgPhotosPerVisibleGroup,
+    facesDiscardedLowQuality: state.runtimeStats?.facesDiscardedLowQuality ?? 0,
+    facesEligibleAsSeeds: state.runtimeStats?.facesEligibleAsSeeds ?? 0,
+  }
+
+  console.log('[PhotoFind:PersonGroups] clustering_complete', clusteringStats)
+
   return updatePersonGrouping(row.id, {
     status: 'ready',
     clusterState: null,
     totalGroups: groupsToInsert.length,
     visibleGroups: visibleCount,
     completedAt: new Date().toISOString(),
+    clusteringStats,
   })
 }
 
@@ -488,31 +611,44 @@ async function processSearchBatch(
   const state = row.cluster_state as ClusterState | null
   if (!state) return row
 
+  const phase = state.phase ?? 'clustering'
+  if (phase === 'merging') {
+    return processMergeBatch(row, collection, state)
+  }
+  return processClusteringBatch(row, collection, state)
+}
+
+async function processClusteringBatch(
+  row: PersonGroupingRow,
+  collection: AlbumCollectionRow,
+  state: ClusterState,
+): Promise<PersonGroupingRow | null> {
   let searchCalls = row.search_faces_calls
   let seedIndex = state.nextSeedIndex
   let batchSearches = 0
   const faceIdsInCollection = new Set(state.faces.map((f) => f.faceId))
+  const seedQueue = state.seedQueue ?? []
 
-  while (seedIndex < state.faces.length && batchSearches < PERSON_GROUPING_SEARCH_BATCH_SIZE) {
-    const seed = state.faces[seedIndex]
+  while (seedIndex < seedQueue.length && batchSearches < PERSON_GROUPING_SEARCH_BATCH_SIZE) {
+    const seedFaceId = seedQueue[seedIndex]
     seedIndex++
 
-    if (findRoot(state.faces, seed.faceId) !== seed.faceId) {
+    if (findRoot(state.faces, seedFaceId) !== seedFaceId) {
       continue
     }
 
     try {
       const matches = await searchFaces(
         collection.collection_id,
-        seed.faceId,
+        seedFaceId,
         PERSON_GROUPING_MAX_FACE_MATCHES,
+        SIMILARITY_THRESHOLD,
       )
       searchCalls++
       batchSearches++
-      unionFaces(state.faces, seed.faceId, seed.faceId)
       for (const match of matches) {
         if (faceIdsInCollection.has(match.faceId)) {
-          unionFaces(state.faces, seed.faceId, match.faceId)
+          unionFaces(state.faces, seedFaceId, match.faceId)
         }
       }
     } catch (error) {
@@ -528,9 +664,100 @@ async function processSearchBatch(
   }
 
   state.nextSeedIndex = seedIndex
-  const done = seedIndex >= state.faces.length
+  const clusteringDone = seedIndex >= seedQueue.length
 
-  if (done) {
+  if (clusteringDone) {
+    const indexedFaces = await listIndexedFacesForGrouping(collection.id)
+    const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
+    const confidenceByFace = new Map(indexedFaces.map((f) => [f.face_id, f.confidence]))
+    beginMergePhase(state, bboxByFace, confidenceByFace)
+
+    const processing = await updatePersonGrouping(row.id, {
+      status: 'processing',
+      clusterState: state,
+      searchFacesCalls: searchCalls,
+    })
+    if (!processing) return null
+
+    if ((state.mergeQueue?.length ?? 0) === 0) {
+      return finalizeGrouping(processing, collection, state)
+    }
+    return processing
+  }
+
+  return updatePersonGrouping(row.id, {
+    status: 'processing',
+    clusterState: state,
+    searchFacesCalls: searchCalls,
+    startedAt: row.started_at ?? new Date().toISOString(),
+  })
+}
+
+async function processMergeBatch(
+  row: PersonGroupingRow,
+  collection: AlbumCollectionRow,
+  state: ClusterState,
+): Promise<PersonGroupingRow | null> {
+  let searchCalls = row.search_faces_calls
+  let mergeIndex = state.nextMergeIndex ?? 0
+  let batchSearches = 0
+  const mergeQueue = state.mergeQueue ?? []
+  const faceIdsInCollection = new Set(state.faces.map((f) => f.faceId))
+  const representativeSet = new Set(state.representativeFaceIds ?? [])
+  if (!state.runtimeStats) {
+    state.runtimeStats = {
+      facesEligibleAsSeeds: state.seedQueue?.length ?? 0,
+      facesDiscardedLowQuality: 0,
+      groupsMerged: 0,
+      mergeSearchFacesCalls: 0,
+    }
+  }
+
+  while (mergeIndex < mergeQueue.length && batchSearches < PERSON_GROUPING_SEARCH_BATCH_SIZE) {
+    const seedFaceId = mergeQueue[mergeIndex]
+    mergeIndex++
+
+    const seedRoot = findRoot(state.faces, seedFaceId)
+    if (!faceIdsInCollection.has(seedFaceId)) continue
+
+    try {
+      const matches = await searchFaces(
+        collection.collection_id,
+        seedFaceId,
+        PERSON_GROUPING_MAX_FACE_MATCHES,
+        PERSON_GROUPING_MERGE_SIMILARITY_THRESHOLD,
+      )
+      searchCalls++
+      batchSearches++
+      state.runtimeStats.mergeSearchFacesCalls = (state.runtimeStats.mergeSearchFacesCalls ?? 0) + 1
+
+      for (const match of matches) {
+        if (!faceIdsInCollection.has(match.faceId)) continue
+        const matchRoot = findRoot(state.faces, match.faceId)
+        if (matchRoot === seedRoot) continue
+        if (!shouldMergeGroups(match.similarity, match.faceId, representativeSet)) continue
+
+        unionFaces(state.faces, seedFaceId, match.faceId)
+        state.runtimeStats.groupsMerged = (state.runtimeStats.groupsMerged ?? 0) + 1
+        representativeSet.add(match.faceId)
+      }
+    } catch (error) {
+      console.error('[PhotoFind:PersonGroups] merge_search_failed', error instanceof Error ? error.message : error)
+      return updatePersonGrouping(row.id, {
+        status: 'failed',
+        lastError: 'AWS Rekognition no pudo refinar la agrupación.',
+        failedAt: new Date().toISOString(),
+        clusterState: state,
+        searchFacesCalls: searchCalls,
+      })
+    }
+  }
+
+  state.nextMergeIndex = mergeIndex
+  state.representativeFaceIds = [...representativeSet]
+  const mergeDone = mergeIndex >= mergeQueue.length
+
+  if (mergeDone) {
     const processing = await updatePersonGrouping(row.id, {
       status: 'processing',
       clusterState: state,

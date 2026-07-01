@@ -6,11 +6,14 @@ import { getFacialProfileMeta, deleteFacialProfile } from '../supabase/facialPro
 import { SupabaseConfigError } from '../supabase/client'
 import {
   buildProcessedAlbums,
+  deleteSearchHistoryEntry,
+  deleteSearchHistoryForAlbum,
   listRecentSearches,
   recordSearch,
+  type DashboardAlbumContext,
 } from '../supabase/searchHistoryStore'
-import { getEventCategoriesByUrlHashes, hashAlbumUrl } from '../supabase/albumCollectionStore'
-import { listResumableJobsForUser } from '../supabase/albumProcessingJobStore'
+import { getCollectionSummariesByUrlHashes, getEventCategoriesByUrlHashes, hashAlbumUrl } from '../supabase/albumCollectionStore'
+import { findActiveJobsByUrlHashesForUser, listResumableJobsForUser } from '../supabase/albumProcessingJobStore'
 import { cancelAlbumJobForUser } from '../recognize/albumJobService'
 import { getOperatorAccessForUser } from '../admin/operatorAccess'
 
@@ -166,6 +169,9 @@ interface RecordSearchBody {
   eventCategory?: string
   photosFound?: number
   totalPhotos?: number | null
+  matchedImageIds?: string[]
+  analyzedCount?: number
+  searchMethod?: string | null
 }
 
 export async function handleRecordSearchRequest(
@@ -202,6 +208,9 @@ export async function handleRecordSearchRequest(
       eventCategory: eventCategory || null,
       photosFound: body.photosFound,
       totalPhotos: body.totalPhotos,
+      matchedImageIds: Array.isArray(body.matchedImageIds) ? body.matchedImageIds : undefined,
+      analyzedCount: typeof body.analyzedCount === 'number' ? body.analyzedCount : undefined,
+      searchMethod: body.searchMethod ?? null,
     })
     sendJson(res, 201, { ok: true, search: item })
   } catch (err) {
@@ -231,6 +240,46 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
     const activeAlbumJobs = await listResumableJobsForUser(user.id)
     const operatorAccess = await getOperatorAccessForUser(user.id)
 
+    const albumUrls = [
+      ...new Set([
+        ...processedAlbums.map((a) => a.albumUrl),
+        ...recentSearches.map((s) => s.albumUrl),
+      ]),
+    ]
+    const hashToUrl = new Map(albumUrls.map((url) => [hashAlbumUrl(url), url]))
+    const urlHashes = [...hashToUrl.keys()]
+    const [collectionSummaries, activeJobsByHash] = await Promise.all([
+      getCollectionSummariesByUrlHashes(urlHashes),
+      findActiveJobsByUrlHashesForUser(user.id, urlHashes),
+    ])
+
+    const albumContexts: Record<string, DashboardAlbumContext> = {}
+    for (const [hash, summary] of collectionSummaries) {
+      const url = hashToUrl.get(hash)
+      if (!url) continue
+      const activeJob = activeJobsByHash.get(hash)
+      albumContexts[url] = {
+        collectionStatus: (summary.status as DashboardAlbumContext['collectionStatus']) ?? 'none',
+        indexedImages: summary.indexedImages,
+        totalImages: summary.totalImages,
+        indexedFaces: summary.indexedFaces,
+        activeJobId: activeJob?.jobId ?? null,
+        activeJobStatus: activeJob?.status ?? null,
+      }
+    }
+    for (const [hash, activeJob] of activeJobsByHash) {
+      const url = hashToUrl.get(hash)
+      if (!url || albumContexts[url]) continue
+      albumContexts[url] = {
+        collectionStatus: 'processing',
+        indexedImages: 0,
+        totalImages: 0,
+        indexedFaces: 0,
+        activeJobId: activeJob.jobId,
+        activeJobStatus: activeJob.status,
+      }
+    }
+
     sendJson(res, 200, {
       ok: true,
       user,
@@ -238,12 +287,53 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
       recentSearches,
       processedAlbums,
       activeAlbumJobs,
+      albumContexts,
       ...operatorAccess,
     })
   } catch (err) {
     console.error('[PhotoFind:Server] dashboard_error', err instanceof Error ? err.message : err)
     sendJson(res, 500, { ok: false, error: { code: 'DASHBOARD_FETCH_FAILED', message: 'No pudimos cargar el dashboard.' } })
   }
+}
+
+export async function handleDeleteSearchHistoryRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  searchId: string,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  const id = searchId.trim()
+  if (!id) {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Falta el identificador.' } })
+    return
+  }
+
+  const deleted = await deleteSearchHistoryEntry(user.id, id)
+  if (!deleted) {
+    sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'No encontramos esa búsqueda.' } })
+    return
+  }
+  sendJson(res, 200, { ok: true })
+}
+
+export async function handleDeleteAlbumSearchHistoryRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  albumUrl: string,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  const url = albumUrl.trim()
+  if (!url) {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Falta la URL del álbum.' } })
+    return
+  }
+
+  const deletedCount = await deleteSearchHistoryForAlbum(user.id, url)
+  sendJson(res, 200, { ok: true, deletedCount })
 }
 
 export async function handleCancelActiveAlbumJobRequest(

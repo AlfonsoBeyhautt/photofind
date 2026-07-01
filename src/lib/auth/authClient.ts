@@ -266,9 +266,20 @@ export async function recordSearch(data: RecordSearchBody): Promise<void> {
   try {
     await authPostJson('/api/auth/search-history', data)
   } catch {
-    // No bloquear el flujo de búsqueda si falla el guardado del historial
     console.warn('[PhotoFind] No se pudo guardar la búsqueda en el historial.')
   }
+}
+
+export async function deleteSearchHistory(
+  searchId: string,
+): Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }> {
+  return authDeleteJson(`/api/auth/search-history/${encodeURIComponent(searchId)}`)
+}
+
+export async function deleteAlbumSearchHistory(
+  albumUrl: string,
+): Promise<{ ok: true; deletedCount?: number } | { ok: false; error: { code: string; message: string } }> {
+  return authDeleteJson(`/api/auth/search-history/album?albumUrl=${encodeURIComponent(albumUrl)}`)
 }
 
 export function formatSearchDate(iso: string): string {

@@ -23,7 +23,7 @@ export const COMPARE_PHASE_MAX_PHOTOS = 50
 export const INDEX_BATCH_SIZE = 10
 
 /** Person grouping: algorithm version (invalidate cache on change). */
-export const PERSON_GROUPING_ALGORITHM_VERSION = 'searchfaces-unionfind-v1'
+export const PERSON_GROUPING_ALGORITHM_VERSION = 'searchfaces-unionfind-v2'
 
 /** Minimum distinct photos per visible group in UI. */
 export const PERSON_GROUPING_MIN_PHOTOS = 2
@@ -33,6 +33,27 @@ export const PERSON_GROUPING_SEARCH_BATCH_SIZE = 8
 
 /** Max faces returned per SearchFaces call. */
 export const PERSON_GROUPING_MAX_FACE_MATCHES = 4096
+
+/** Min detection confidence to use a face as clustering seed. */
+export const PERSON_GROUPING_MIN_SEED_CONFIDENCE = 75
+
+/** Min bbox area (fraction of frame) for clustering seeds — helps group photos. */
+export const PERSON_GROUPING_MIN_SEED_BBOX_AREA = 0.0012
+
+/** Representatives per group used in the merge pass. */
+export const PERSON_GROUPING_MERGE_REPRESENTATIVES = 3
+
+/** Max SearchFaces calls in merge pass (cost cap). */
+export const PERSON_GROUPING_MERGE_MAX_SEARCHES = 48
+
+/** Merge pass: minimum similarity to consider linking groups. */
+export const PERSON_GROUPING_MERGE_SIMILARITY_THRESHOLD = 82
+
+/** Merge pass: auto-merge on a single strong match. */
+export const PERSON_GROUPING_MERGE_HIGH_CONFIDENCE = 88
+
+/** Groups below this representative quality score are marked low-confidence. */
+export const PERSON_GROUPING_MIN_GROUP_QUALITY_SCORE = 8
 
 /** Warn in UI when album exceeds this size (async pipeline later). */
 export const LARGE_ALBUM_WARNING_PHOTOS = 500

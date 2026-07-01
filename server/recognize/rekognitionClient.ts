@@ -140,16 +140,17 @@ export async function searchFaces(
   collectionId: string,
   faceId: string,
   maxFaces = 4096,
+  similarityThreshold = SIMILARITY_THRESHOLD,
 ): Promise<SearchFaceMatch[]> {
   const response = await getClient().send(new SearchFacesCommand({
     CollectionId: collectionId,
     FaceId: faceId,
-    FaceMatchThreshold: SIMILARITY_THRESHOLD,
+    FaceMatchThreshold: similarityThreshold,
     MaxFaces: maxFaces,
   }))
 
   return (response.FaceMatches ?? [])
-    .filter((match) => match.Face?.FaceId && (match.Similarity ?? 0) >= SIMILARITY_THRESHOLD)
+    .filter((match) => match.Face?.FaceId && (match.Similarity ?? 0) >= similarityThreshold)
     .map((match) => ({
       faceId: match.Face!.FaceId!,
       similarity: match.Similarity ?? 0,

@@ -38,9 +38,12 @@ export interface SearchHistoryRow {
   album_name: string
   album_url: string
   provider: string
-  event_category: string
+  event_category: string | null
   photos_found: number
   total_photos: number | null
+  matched_image_ids: string[] | null
+  analyzed_count: number | null
+  search_method: string | null
   created_at: string
 }
 
@@ -52,6 +55,9 @@ export interface SearchHistoryItem {
   eventCategory: string | null
   photosFound: number
   totalPhotos: number | null
+  matchedImageIds: string[] | null
+  analyzedCount: number | null
+  searchMethod: string | null
   createdAt: string
 }
 
@@ -63,9 +69,21 @@ export interface ProcessedAlbumItem {
   lastSearchedAt: string
   searchCount: number
   eventCategory: string | null
+  latestSearchId: string | null
+  latestMatchedImageIds: string[] | null
+}
+
+export interface DashboardAlbumContext {
+  collectionStatus: 'none' | 'pending' | 'processing' | 'ready' | 'failed'
+  indexedImages: number
+  totalImages: number
+  indexedFaces: number
+  activeJobId: string | null
+  activeJobStatus: string | null
 }
 
 function rowToItem(row: SearchHistoryRow): SearchHistoryItem {
+  const matchedIds = row.matched_image_ids
   return {
     id: row.id,
     albumName: row.album_name,
@@ -74,6 +92,9 @@ function rowToItem(row: SearchHistoryRow): SearchHistoryItem {
     eventCategory: row.event_category || null,
     photosFound: row.photos_found,
     totalPhotos: row.total_photos,
+    matchedImageIds: Array.isArray(matchedIds) ? matchedIds : null,
+    analyzedCount: row.analyzed_count,
+    searchMethod: row.search_method,
     createdAt: row.created_at,
   }
 }
@@ -87,20 +108,35 @@ export async function recordSearch(
     eventCategory?: string | null
     photosFound: number
     totalPhotos?: number | null
+    matchedImageIds?: string[]
+    analyzedCount?: number
+    searchMethod?: string | null
   },
 ): Promise<SearchHistoryItem> {
   const supabase = requireAdmin()
+  const insert: Record<string, unknown> = {
+    user_id: userId,
+    album_name: data.albumName,
+    album_url: data.albumUrl,
+    provider: data.provider,
+    event_category: data.eventCategory?.trim() || null,
+    photos_found: data.photosFound,
+    total_photos: data.totalPhotos ?? null,
+  }
+
+  if (data.matchedImageIds && data.matchedImageIds.length > 0) {
+    insert.matched_image_ids = data.matchedImageIds
+  }
+  if (typeof data.analyzedCount === 'number') {
+    insert.analyzed_count = data.analyzedCount
+  }
+  if (data.searchMethod) {
+    insert.search_method = data.searchMethod
+  }
+
   const { data: row, error } = await supabase
     .from('search_history')
-    .insert({
-      user_id: userId,
-      album_name: data.albumName,
-      album_url: data.albumUrl,
-      provider: data.provider,
-      event_category: data.eventCategory?.trim() || null,
-      photos_found: data.photosFound,
-      total_photos: data.totalPhotos ?? null,
-    })
+    .insert(insert)
     .select('*')
     .single()
 
@@ -135,6 +171,42 @@ export async function listRecentSearches(userId: string, limit = 20): Promise<Se
   return (data as SearchHistoryRow[]).map(rowToItem)
 }
 
+export async function deleteSearchHistoryEntry(
+  userId: string,
+  searchId: string,
+): Promise<boolean> {
+  const supabase = requireAdmin()
+  const { error, count } = await supabase
+    .from('search_history')
+    .delete({ count: 'exact' })
+    .eq('user_id', userId)
+    .eq('id', searchId)
+
+  if (error) {
+    logTableError('search_history', 'deleteSearchHistoryEntry', error)
+    return false
+  }
+  return (count ?? 0) > 0
+}
+
+export async function deleteSearchHistoryForAlbum(
+  userId: string,
+  albumUrl: string,
+): Promise<number> {
+  const supabase = requireAdmin()
+  const { error, count } = await supabase
+    .from('search_history')
+    .delete({ count: 'exact' })
+    .eq('user_id', userId)
+    .eq('album_url', albumUrl.trim())
+
+  if (error) {
+    logTableError('search_history', 'deleteSearchHistoryForAlbum', error)
+    return 0
+  }
+  return count ?? 0
+}
+
 export function buildProcessedAlbums(searches: SearchHistoryItem[]): ProcessedAlbumItem[] {
   const byUrl = new Map<string, ProcessedAlbumItem>()
 
@@ -149,6 +221,8 @@ export function buildProcessedAlbums(searches: SearchHistoryItem[]): ProcessedAl
         lastSearchedAt: search.createdAt,
         searchCount: 1,
         eventCategory: search.eventCategory,
+        latestSearchId: search.id,
+        latestMatchedImageIds: search.matchedImageIds,
       })
       continue
     }

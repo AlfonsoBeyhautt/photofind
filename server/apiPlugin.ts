@@ -53,6 +53,8 @@ import {
   handleGetFacialProfileRequest,
   handleMeRequest,
   handleRecordSearchRequest,
+  handleDeleteSearchHistoryRequest,
+  handleDeleteAlbumSearchHistoryRequest,
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
 } from './auth/authHandler'
@@ -107,6 +109,17 @@ export function driveApiPlugin(): Plugin {
             }
             if (req.url.startsWith('/api/auth/active-album-job/cancel') && req.method === 'POST') {
               await handleCancelActiveAlbumJobRequest(req, res, body)
+              return
+            }
+            if (req.url?.startsWith('/api/auth/search-history/album') && req.method === 'DELETE') {
+              const url = new URL(req.url, 'http://localhost')
+              const albumUrl = url.searchParams.get('albumUrl') ?? ''
+              await handleDeleteAlbumSearchHistoryRequest(req, res, albumUrl)
+              return
+            }
+            if (req.url?.startsWith('/api/auth/search-history/') && req.method === 'DELETE') {
+              const searchId = decodeURIComponent(req.url.replace('/api/auth/search-history/', '').split('?')[0])
+              await handleDeleteSearchHistoryRequest(req, res, searchId)
               return
             }
             if (req.url.startsWith('/api/auth/search-history') && req.method === 'POST') {

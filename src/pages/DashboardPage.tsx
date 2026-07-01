@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -13,6 +13,7 @@ import { FacialProfileSection } from '../components/account/FacialProfileSection
 import { ActiveAlbumJobsSection } from '../components/dashboard/ActiveAlbumJobsSection'
 import { PremiumPersonGroupingSection } from '../components/dashboard/PremiumPersonGroupingSection'
 import { OperatorAccessCard } from '../components/dashboard/OperatorAccessCard'
+import { ProcessedAlbumActions, RecentSearchActions } from '../components/dashboard/DashboardHistoryActions'
 import { useAuth } from '../context/AuthContext'
 import {
   fetchDashboard,
@@ -30,7 +31,7 @@ import {
   type ResumableAlbumJob,
 } from '../lib/recognition/activeAlbumJobs'
 import { clearActiveAlbumJob, pollAlbumJobStatus } from '../lib/recognition/albumJobClient'
-import type { ProcessedAlbumItem, SearchHistoryItem } from '../types/auth'
+import type { ProcessedAlbumItem, SearchHistoryItem, DashboardAlbumContext } from '../types/auth'
 import { eventCategoryLabel } from '../lib/eventCategories'
 import { isPersonGroupingEnabled } from '../types/personGrouping'
 
@@ -41,7 +42,13 @@ export function DashboardPage() {
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([])
   const [processedAlbums, setProcessedAlbums] = useState<ProcessedAlbumItem[]>([])
   const [activeAlbumJobs, setActiveAlbumJobs] = useState<ResumableAlbumJob[]>([])
+  const [albumContexts, setAlbumContexts] = useState<Record<string, DashboardAlbumContext>>({})
   const [pollingJobs, setPollingJobs] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const reloadDashboard = useCallback(() => {
+    setReloadKey((k) => k + 1)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +65,7 @@ export function DashboardPage() {
       setRecentSearches(data.recentSearches)
       setProcessedAlbums(data.processedAlbums)
       setActiveAlbumJobs(matchResumableAlbumJobs(data.activeAlbumJobs ?? []))
+      setAlbumContexts(data.albumContexts ?? {})
       if (data.operatorAccess === true) {
         setOperatorAccess(true)
       }
@@ -65,7 +73,7 @@ export function DashboardPage() {
     }
     void load()
     return () => { cancelled = true }
-  }, [facialProfile, setOperatorAccess])
+  }, [facialProfile, setOperatorAccess, reloadKey])
 
   useEffect(() => {
     if (loading) return
@@ -230,30 +238,30 @@ export function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {recentSearches.map((search) => (
-                    <div
-                      key={search.id}
-                      className="glass rounded-xl p-4 flex items-center gap-4"
-                    >
-                      <div className="w-14 h-14 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
-                        <Search className="w-6 h-6 text-accent-bright" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{search.albumName}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          {search.eventCategory && (
-                            <Badge variant="default">{eventCategoryLabel(search.eventCategory)}</Badge>
-                          )}
-                          <span className="text-xs text-text-dim">{providerLabel(search.provider)}</span>
-                          <span className="text-xs text-text-dim flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatRelativeTime(search.createdAt)}
-                          </span>
+                    <div key={search.id} className="glass rounded-xl p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                          <Search className="w-6 h-6 text-accent-bright" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{search.albumName}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {search.eventCategory && (
+                              <Badge variant="default">{eventCategoryLabel(search.eventCategory)}</Badge>
+                            )}
+                            <span className="text-xs text-text-dim">{providerLabel(search.provider)}</span>
+                            <span className="text-xs text-text-dim flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatRelativeTime(search.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-display font-bold text-accent-bright">{search.photosFound}</p>
+                          <p className="text-xs text-text-dim">fotos</p>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-display font-bold text-accent-bright">{search.photosFound}</p>
-                        <p className="text-xs text-text-dim">fotos</p>
-                      </div>
+                      <RecentSearchActions search={search} onDeleted={reloadDashboard} />
                     </div>
                   ))}
                 </div>
@@ -277,42 +285,46 @@ export function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {processedAlbums.map((album) => (
-                    <div
-                      key={album.albumUrl}
-                      className="glass rounded-xl p-4 flex items-center gap-4"
-                    >
-                      <div className="w-14 h-14 rounded-lg bg-violet/10 border border-violet/20 flex items-center justify-center shrink-0">
-                        <FolderOpen className="w-6 h-6 text-violet-soft" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{album.albumName}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-text-dim">
-                          <span>{providerLabel(album.provider)}</span>
-                          {album.eventCategory && (
-                            <>
-                              <span>·</span>
-                              <Badge variant="default" className="text-[10px] py-0">
-                                {eventCategoryLabel(album.eventCategory)}
-                              </Badge>
-                            </>
-                          )}
-                          {album.totalPhotos != null && (
-                            <>
-                              <span>·</span>
-                              <span>{album.totalPhotos.toLocaleString()} fotos en álbum</span>
-                            </>
-                          )}
-                          {album.searchCount > 1 && (
-                            <>
-                              <span>·</span>
-                              <span>{album.searchCount} búsquedas</span>
-                            </>
-                          )}
+                    <div key={album.albumUrl} className="glass rounded-xl p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-lg bg-violet/10 border border-violet/20 flex items-center justify-center shrink-0">
+                          <FolderOpen className="w-6 h-6 text-violet-soft" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{album.albumName}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-text-dim">
+                            <span>{providerLabel(album.provider)}</span>
+                            {album.eventCategory && (
+                              <>
+                                <span>·</span>
+                                <Badge variant="default" className="text-[10px] py-0">
+                                  {eventCategoryLabel(album.eventCategory)}
+                                </Badge>
+                              </>
+                            )}
+                            {album.totalPhotos != null && (
+                              <>
+                                <span>·</span>
+                                <span>{album.totalPhotos.toLocaleString()} fotos en álbum</span>
+                              </>
+                            )}
+                            {album.searchCount > 1 && (
+                              <>
+                                <span>·</span>
+                                <span>{album.searchCount} búsquedas</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 text-xs text-text-muted">
+                          <span>{formatSearchDate(album.lastSearchedAt)}</span>
                         </div>
                       </div>
-                      <div className="text-right shrink-0 text-xs text-text-muted">
-                        <span>{formatSearchDate(album.lastSearchedAt)}</span>
-                      </div>
+                      <ProcessedAlbumActions
+                        album={album}
+                        context={albumContexts[album.albumUrl]}
+                        onDeleted={reloadDashboard}
+                      />
                     </div>
                   ))}
                 </div>

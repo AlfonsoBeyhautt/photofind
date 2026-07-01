@@ -32,7 +32,7 @@ Luego ejecutá también:
 
 Esto crea la tabla `public.search_history` para búsquedas y álbumes procesados en el dashboard.
 
-Migraciones adicionales (en orden): `003_album_collections.sql`, `004_album_processing_jobs.sql`, `005_person_grouping.sql`, `006_album_event_category.sql`, `007_admin_users.sql`.
+Luego ejecutá también las migraciones `003`–`008` (ver lista en `supabase/README.md`).
 
 ## 3b. Panel de administración (`/admin`)
 
