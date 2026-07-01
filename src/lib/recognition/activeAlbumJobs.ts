@@ -1,5 +1,6 @@
 import type { ActiveAlbumJobItem, ActiveAlbumJobStatus } from '../../types/auth'
-import { getActiveAlbumJob, type StoredAlbumJob } from './albumJobStorage'
+import { cancelActiveAlbumJob } from '../auth/authClient'
+import { clearActiveAlbumJob, getActiveAlbumJob, type StoredAlbumJob } from './albumJobStorage'
 import type { AlbumJobProgressUpdate } from './albumJobClient'
 
 export interface ResumableAlbumJob extends ActiveAlbumJobItem {
@@ -116,4 +117,20 @@ export function activeJobActionLabel(status: ActiveAlbumJobStatus): string {
 
 export function activeJobActionNeedsRetry(status: ActiveAlbumJobStatus): boolean {
   return status === 'failed'
+}
+
+export async function dismissActiveAlbumJob(
+  jobId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await cancelActiveAlbumJob(jobId)
+  if (!result.ok) {
+    return { ok: false, message: result.error.message }
+  }
+
+  const stored = getActiveAlbumJob()
+  if (stored?.jobId === jobId) {
+    clearActiveAlbumJob()
+  }
+
+  return { ok: true }
 }

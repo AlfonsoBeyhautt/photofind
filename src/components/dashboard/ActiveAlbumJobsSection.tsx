@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { Progress } from '../ui/Progress'
@@ -17,10 +18,12 @@ import type { ActiveAlbumJobStatus } from '../../types/auth'
 interface ActiveAlbumJobsSectionProps {
   jobs: ResumableAlbumJob[]
   polling?: boolean
+  onDismiss: (jobId: string) => Promise<{ ok: true } | { ok: false; message: string }>
 }
 
-export function ActiveAlbumJobsSection({ jobs, polling }: ActiveAlbumJobsSectionProps) {
+export function ActiveAlbumJobsSection({ jobs, polling, onDismiss }: ActiveAlbumJobsSectionProps) {
   const navigate = useNavigate()
+  const [dismissError, setDismissError] = useState<string | null>(null)
 
   if (jobs.length === 0) return null
 
@@ -56,9 +59,32 @@ export function ActiveAlbumJobsSection({ jobs, polling }: ActiveAlbumJobsSection
         )}
       </div>
 
+      {dismissError && (
+        <p className="text-sm text-amber-300 mb-3">{dismissError}</p>
+      )}
+
       <div className="space-y-3">
         {jobs.map((job) => (
-          <ActiveAlbumJobCard key={job.jobId} job={job} onAction={() => handleAction(job)} />
+          <ActiveAlbumJobCard
+            key={job.jobId}
+            job={job}
+            onAction={() => handleAction(job)}
+            onDismiss={async () => {
+              setDismissError(null)
+              const inProgress = isInProgress(job.status)
+              const confirmed = window.confirm(
+                inProgress
+                  ? '¿Cancelar este análisis? Ya no aparecerá en tu dashboard.'
+                  : '¿Eliminar este análisis de la lista?',
+              )
+              if (!confirmed) return
+
+              const result = await onDismiss(job.jobId)
+              if (!result.ok) {
+                setDismissError(result.message)
+              }
+            }}
+          />
         ))}
       </div>
     </motion.section>
@@ -68,12 +94,24 @@ export function ActiveAlbumJobsSection({ jobs, polling }: ActiveAlbumJobsSection
 function ActiveAlbumJobCard({
   job,
   onAction,
+  onDismiss,
 }: {
   job: ResumableAlbumJob
   onAction: () => void
+  onDismiss: () => Promise<void>
 }) {
   const inProgress = isInProgress(job.status)
   const showProgress = inProgress || job.status === 'ready'
+  const [dismissing, setDismissing] = useState(false)
+
+  const handleDismiss = async () => {
+    setDismissing(true)
+    try {
+      await onDismiss()
+    } finally {
+      setDismissing(false)
+    }
+  }
 
   return (
     <div className="glass rounded-xl p-4 sm:p-5">
@@ -113,14 +151,31 @@ function ActiveAlbumJobCard({
           )}
         </div>
 
-        <Button
-          size="md"
-          variant={job.status === 'failed' ? 'outline' : 'primary'}
-          className="w-full sm:w-auto shrink-0"
-          onClick={onAction}
-        >
-          {activeJobActionLabel(job.status)}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
+          <Button
+            size="md"
+            variant={job.status === 'failed' ? 'outline' : 'primary'}
+            className="w-full sm:w-auto"
+            onClick={onAction}
+          >
+            {activeJobActionLabel(job.status)}
+          </Button>
+          <Button
+            size="md"
+            variant="ghost"
+            className="w-full sm:w-auto text-text-muted hover:text-red-300"
+            disabled={dismissing}
+            onClick={() => void handleDismiss()}
+            aria-label="Eliminar análisis"
+          >
+            {dismissing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+            Eliminar
+          </Button>
+        </div>
       </div>
     </div>
   )

@@ -256,6 +256,12 @@ export async function fetchDashboard(): Promise<DashboardData | { ok: false; err
   return authGetJson('/api/auth/dashboard')
 }
 
+export async function cancelActiveAlbumJob(
+  jobId: string,
+): Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }> {
+  return authPostJson<{ ok: true }>('/api/auth/active-album-job/cancel', { jobId })
+}
+
 export async function recordSearch(data: RecordSearchBody): Promise<void> {
   try {
     await authPostJson('/api/auth/search-history', data)

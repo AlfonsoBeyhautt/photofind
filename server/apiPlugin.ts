@@ -42,6 +42,7 @@ import { handleHealthRequest } from './debug/healthHandler'
 import {
   handleDeleteFacialProfileRequest,
   handleDashboardRequest,
+  handleCancelActiveAlbumJobRequest,
   handleGetFacialProfileRequest,
   handleMeRequest,
   handleRecordSearchRequest,
@@ -90,6 +91,10 @@ export function driveApiPlugin(): Plugin {
             }
             if (req.url.startsWith('/api/auth/dashboard') && req.method === 'GET') {
               await handleDashboardRequest(req, res)
+              return
+            }
+            if (req.url.startsWith('/api/auth/active-album-job/cancel') && req.method === 'POST') {
+              await handleCancelActiveAlbumJobRequest(req, res, body)
               return
             }
             if (req.url.startsWith('/api/auth/search-history') && req.method === 'POST') {

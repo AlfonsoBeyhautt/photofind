@@ -24,6 +24,7 @@ import {
   jobFromStatusPayload,
   jobProgressFromPoll,
   matchResumableAlbumJobs,
+  dismissActiveAlbumJob,
   type ResumableAlbumJob,
 } from '../lib/recognition/activeAlbumJobs'
 import { clearActiveAlbumJob, pollAlbumJobStatus } from '../lib/recognition/albumJobClient'
@@ -169,7 +170,17 @@ export function DashboardPage() {
           </div>
         </motion.div>
 
-        <ActiveAlbumJobsSection jobs={activeAlbumJobs} polling={pollingJobs} />
+        <ActiveAlbumJobsSection
+          jobs={activeAlbumJobs}
+          polling={pollingJobs}
+          onDismiss={async (jobId) => {
+            const result = await dismissActiveAlbumJob(jobId)
+            if (result.ok) {
+              setActiveAlbumJobs((current) => current.filter((job) => job.jobId !== jobId))
+            }
+            return result
+          }}
+        />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}

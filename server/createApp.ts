@@ -44,6 +44,7 @@ import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from
 import {
   handleDeleteFacialProfileRequest,
   handleDashboardRequest,
+  handleCancelActiveAlbumJobRequest,
   handleGetFacialProfileRequest,
   handleMeRequest,
   handleRecordSearchRequest,
@@ -343,6 +344,18 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   app.get('/api/auth/dashboard', async (req, res) => {
     await handleDashboardRequest(req, res)
+  })
+
+  app.post('/api/auth/active-album-job/cancel', async (req, res) => {
+    try {
+      await handleCancelActiveAlbumJobRequest(req, res, JSON.stringify(req.body ?? {}))
+    } catch (err) {
+      console.error('[PhotoFind:Backend] cancel_active_album_job_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos cancelar el análisis.' },
+      })
+    }
   })
 
   app.post('/api/auth/search-history', async (req, res) => {

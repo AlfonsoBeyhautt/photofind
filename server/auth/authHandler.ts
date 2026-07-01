@@ -10,6 +10,7 @@ import {
   recordSearch,
 } from '../supabase/searchHistoryStore'
 import { listResumableJobsForUser } from '../supabase/albumProcessingJobStore'
+import { cancelAlbumJobForUser } from '../recognize/albumJobService'
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.statusCode = status
@@ -227,5 +228,36 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
   } catch (err) {
     console.error('[PhotoFind:Server] dashboard_error', err instanceof Error ? err.message : err)
     sendJson(res, 500, { ok: false, error: { code: 'DASHBOARD_FETCH_FAILED', message: 'No pudimos cargar el dashboard.' } })
+  }
+}
+
+export async function handleCancelActiveAlbumJobRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  rawBody: string,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  let body: { jobId?: string }
+  try {
+    body = JSON.parse(rawBody) as { jobId?: string }
+  } catch {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Solicitud inválida.' } })
+    return
+  }
+
+  const jobId = body.jobId?.trim()
+  if (!jobId) {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Falta el identificador del análisis.' } })
+    return
+  }
+
+  try {
+    const result = await cancelAlbumJobForUser(jobId, user.id)
+    sendJson(res, result.ok ? 200 : 404, result)
+  } catch (err) {
+    console.error('[PhotoFind:Server] cancel_active_album_job_error', err instanceof Error ? err.message : err)
+    sendJson(res, 500, { ok: false, error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos cancelar el análisis.' } })
   }
 }

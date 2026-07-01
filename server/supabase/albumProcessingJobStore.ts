@@ -322,3 +322,34 @@ export async function listResumableJobsForUser(
       }
     })
 }
+
+export async function cancelAlbumProcessingJobForUser(
+  jobId: string,
+  userId: string,
+): Promise<AlbumProcessingJobRow | null> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return null
+
+  const existing = await getAlbumProcessingJobById(jobId)
+  if (!existing || existing.user_id !== userId) return null
+  if (existing.status === 'cancelled') return existing
+
+  const { data, error } = await admin.client
+    .from('album_processing_jobs')
+    .update({ status: 'cancelled' })
+    .eq('id', jobId)
+    .eq('user_id', userId)
+    .select('*')
+    .maybeSingle()
+
+  if (error) {
+    console.error('[PhotoFind:Jobs] cancel', error.message)
+    return null
+  }
+
+  const row = data as AlbumProcessingJobRow | null
+  if (row) {
+    console.log('[PhotoFind:Jobs] cancelled', { jobId: row.id, userId })
+  }
+  return row
+}

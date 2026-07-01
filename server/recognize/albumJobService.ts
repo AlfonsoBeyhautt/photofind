@@ -18,6 +18,7 @@ import {
   jobStatusMessage,
   resetFailedJobForRetry,
   updateAlbumProcessingJob,
+  cancelAlbumProcessingJobForUser,
   type AlbumProcessingJobRow,
 } from '../supabase/albumProcessingJobStore'
 import {
@@ -503,3 +504,19 @@ export async function searchAlbumJob(input: {
 }
 
 export { ASYNC_JOB_MIN_PHOTOS }
+
+export async function cancelAlbumJobForUser(
+  jobId: string,
+  userId: string,
+): Promise<{ ok: true } | AlbumJobStartFailure> {
+  if (!isAlbumJobStoreAvailable()) {
+    return fail('RECOGNITION_COLLECTION_METADATA_ERROR')
+  }
+
+  const cancelled = await cancelAlbumProcessingJobForUser(jobId, userId)
+  if (!cancelled) {
+    return fail('ALBUM_JOB_NOT_FOUND', 'No encontramos ese análisis o no podés cancelarlo.', false)
+  }
+
+  return { ok: true }
+}
