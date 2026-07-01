@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { requireAdmin } from './adminAuth'
 import { fetchAdminMetrics } from './adminMetricsService'
+import { fetchQualityMetrics } from './qualityMetricsService'
 import { SupabaseConfigError } from '../supabase/client'
 import {
   findAdminByEmail,
@@ -37,6 +38,32 @@ export async function handleAdminMetricsRequest(
     sendJson(res, 500, {
       ok: false,
       error: { code: 'ADMIN_METRICS_FAILED', message: 'No pudimos cargar las métricas.' },
+    })
+  }
+}
+
+export async function handleAdminQualityMetricsRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const user = await requireAdmin(req, res)
+  if (!user) return
+
+  try {
+    const metrics = await fetchQualityMetrics()
+    sendJson(res, 200, { ok: true, metrics })
+  } catch (err) {
+    if (err instanceof SupabaseConfigError) {
+      sendJson(res, 503, {
+        ok: false,
+        error: { code: 'SUPABASE_NOT_CONFIGURED', message: err.message },
+      })
+      return
+    }
+    console.error('[PhotoFind:Admin] quality_metrics_error', err instanceof Error ? err.message : err)
+    sendJson(res, 500, {
+      ok: false,
+      error: { code: 'ADMIN_QUALITY_METRICS_FAILED', message: 'No pudimos cargar las métricas de calidad.' },
     })
   }
 }

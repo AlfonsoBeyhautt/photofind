@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AlbumImage } from '../../src/types/album'
+import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
 import {
   getAlbumJobStatus,
   processAlbumJobBatch,
@@ -37,6 +38,7 @@ interface JobSearchBody {
   collectionId?: string
   albumTotal?: number
   collectionReused?: boolean
+  qualityTelemetry?: QualityTelemetryInput
 }
 
 export async function handleAlbumJobStartRequest(
@@ -126,7 +128,7 @@ export async function handleAlbumJobSearchRequest(
     return
   }
 
-  const { jobId, referenceToken, albumCollectionId, collectionId, albumTotal, collectionReused } = body
+  const { jobId, referenceToken, albumCollectionId, collectionId, albumTotal, collectionReused, qualityTelemetry } = body
   if (!referenceToken || !albumCollectionId || !collectionId || typeof albumTotal !== 'number') {
     sendJson(res, 400, {
       ok: false,
@@ -142,6 +144,7 @@ export async function handleAlbumJobSearchRequest(
     collectionId,
     albumTotal,
     collectionReused: collectionReused ?? false,
+    qualityTelemetry,
   })
   sendJson(res, result.ok ? 200 : 400, result)
 }

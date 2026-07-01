@@ -1,4 +1,4 @@
-import type { AdminErrorResponse, AdminMetrics, AdminMetricsResponse } from '../../types/admin'
+import type { AdminErrorResponse, AdminMetrics, AdminMetricsResponse, QualityMetricsResponse } from '../../types/admin'
 import { apiGetJson, apiPostJson, isApiTransportError } from '../api/apiFetch'
 import { supabase } from '../supabase/client'
 
@@ -41,6 +41,10 @@ async function adminPostJson<T>(url: string, body: unknown): Promise<T | AdminEr
 
 export async function fetchAdminMetrics(): Promise<AdminMetricsResponse | AdminErrorResponse> {
   return adminGetJson<AdminMetricsResponse>('/api/admin/metrics')
+}
+
+export async function fetchQualityMetrics(): Promise<QualityMetricsResponse | AdminErrorResponse> {
+  return adminGetJson<QualityMetricsResponse>('/api/admin/quality-metrics')
 }
 
 export async function addAdminByEmail(email: string): Promise<

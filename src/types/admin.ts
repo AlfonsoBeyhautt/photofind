@@ -101,3 +101,65 @@ export interface AdminErrorResponse {
   ok: false
   error: { code: string; message: string }
 }
+
+export interface QualityMetrics {
+  generatedAt: string
+  configuredThreshold: number
+  runs: {
+    total: number
+    completed: number
+    failed: number
+    abandoned: number
+    zeroResults: number
+    withDownloads: number
+    immediateDownloads: number
+    repeatSearches: number
+    retriedReference: number
+    avgMatchesFound: number
+    avgDownloads: number
+    avgSimilarityMax: number | null
+    collectionReused: number
+    compareFallback: number
+    collectionSearch: number
+    avgMsTotal: number | null
+    avgMsSearch: number | null
+  }
+  byProvider: Array<{
+    provider: string
+    runs: number
+    avgMatches: number
+    avgMsTotal: number | null
+    zeroResults: number
+    withDownloads: number
+  }>
+  grouping: {
+    totalSnapshots: number
+    avgVisibleGroups: number
+    avgGroupsMerged: number
+    avgUngroupedFaces: number
+    avgLowConfidenceGroups: number
+    recent: Array<{
+      createdAt: string
+      provider: string | null
+      visibleGroups: number | null
+      groupsMerged: number | null
+      ungroupedFacesCount: number
+    }>
+  }
+  recentRuns: Array<{
+    runId: string
+    provider: string | null
+    searchMethod: string | null
+    matchesFound: number
+    imagesDownloaded: number
+    outcome: string
+    similarityThreshold: number
+    collectionReused: boolean | null
+    createdAt: string
+  }>
+}
+
+export interface QualityMetricsResponse {
+  ok: true
+  metrics: QualityMetrics
+}

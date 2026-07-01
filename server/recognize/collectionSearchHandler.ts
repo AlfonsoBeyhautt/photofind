@@ -27,12 +27,15 @@ interface IndexBatchBody {
   images?: AlbumImage[]
 }
 
+import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
+
 interface SearchCollectionBody {
   referenceToken?: string
   albumCollectionId?: string
   collectionId?: string
   albumTotal?: number
   collectionReused?: boolean
+  qualityTelemetry?: QualityTelemetryInput
 }
 
 export async function handlePrepareCollectionRequest(
@@ -116,7 +119,7 @@ export async function handleSearchCollectionRequest(
     return
   }
 
-  const { referenceToken, albumCollectionId, collectionId, albumTotal, collectionReused } = body
+  const { referenceToken, albumCollectionId, collectionId, albumTotal, collectionReused, qualityTelemetry } = body
   if (!referenceToken || !albumCollectionId || !collectionId || typeof albumTotal !== 'number') {
     sendJson(res, 400, {
       ok: false,
@@ -131,6 +134,7 @@ export async function handleSearchCollectionRequest(
     collectionId,
     albumTotal,
     collectionReused: collectionReused ?? false,
+    qualityTelemetry,
   })
   sendJson(res, result.ok ? 200 : 400, result)
 }

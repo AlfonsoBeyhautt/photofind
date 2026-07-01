@@ -23,6 +23,16 @@ import { getProviderMeta } from '../../types/provider'
 import type { AlbumData, DriveError } from '../../types/album'
 import type { AlbumProvider } from '../../types/provider'
 import type { RecognitionSearchResult } from '../../types/recognition'
+import type { PersonMethod } from './PersonSelection'
+import {
+  consumeRepeatSearchFlag,
+  createQualityRunId,
+  recordQualityAbandoned,
+  recordQualityProcessingTiming,
+  recordQualityRunStarted,
+  type QualityTelemetryContext,
+} from '../../lib/telemetry/qualityClient'
+import { getOrCreateSessionId } from '../../lib/recognition/sessionId'
 
 interface ProcessingScreenProps {
   albumUrl: string
@@ -32,6 +42,8 @@ interface ProcessingScreenProps {
   qualityWarning?: string
   userId?: string | null
   initialRetry?: boolean
+  referenceSource?: PersonMethod
+  onQualityRunStarted?: (runId: string) => void
   onComplete?: (result: RecognitionSearchResult) => void
   onIndexComplete?: () => void
   onError: () => void
@@ -46,6 +58,8 @@ export function ProcessingScreen({
   eventCategory = null,
   userId,
   initialRetry = false,
+  referenceSource,
+  onQualityRunStarted,
   onComplete,
   onIndexComplete,
   onError,
@@ -66,6 +80,8 @@ export function ProcessingScreen({
       eventCategory={eventCategory}
       userId={userId}
       initialRetry={initialRetry}
+      referenceSource={referenceSource}
+      onQualityRunStarted={onQualityRunStarted}
       onComplete={onComplete}
       onIndexComplete={onIndexComplete}
       onError={onError}
@@ -84,6 +100,8 @@ interface AlbumProcessingScreenProps {
   eventCategory?: string | null
   userId?: string | null
   initialRetry?: boolean
+  referenceSource?: PersonMethod
+  onQualityRunStarted?: (runId: string) => void
   onComplete?: (result: RecognitionSearchResult) => void
   onIndexComplete?: () => void
   onError: () => void
@@ -109,6 +127,8 @@ function AlbumProcessingScreen({
   eventCategory = null,
   userId,
   initialRetry = false,
+  referenceSource,
+  onQualityRunStarted,
   onComplete,
   onIndexComplete,
   onError,
@@ -152,6 +172,10 @@ function AlbumProcessingScreen({
   const errorRef = useRef(error)
   const userIdRef = useRef(userId)
   const eventCategoryRef = useRef(eventCategory)
+  const referenceSourceRef = useRef(referenceSource)
+  const qualityRunIdRef = useRef<string | null>(null)
+  const runStartedAtRef = useRef<number | null>(null)
+  const preloadStartedAtRef = useRef<number | null>(null)
 
   fetchAlbumRef.current = fetchAlbum
   onCompleteRef.current = onComplete
@@ -160,9 +184,13 @@ function AlbumProcessingScreen({
   errorRef.current = error
   userIdRef.current = userId
   eventCategoryRef.current = eventCategory
+  referenceSourceRef.current = referenceSource
 
   const handleCancel = () => {
     abortRef.current?.abort()
+    if (qualityRunIdRef.current) {
+      void recordQualityAbandoned(qualityRunIdRef.current)
+    }
     resetProcessingKey(processingKey)
     onError()
   }
@@ -184,6 +212,11 @@ function AlbumProcessingScreen({
     }, 350)
 
     async function run() {
+      const qualityRunId = createQualityRunId()
+      qualityRunIdRef.current = qualityRunId
+      runStartedAtRef.current = Date.now()
+      onQualityRunStarted?.(qualityRunId)
+
       setPhase('fetching')
       setProgress(5)
       setStatusLine('Leyendo álbum...')
@@ -206,6 +239,7 @@ function AlbumProcessingScreen({
       setThumbnailsReadyRef.current(false)
 
       try {
+        const fetchStarted = Date.now()
         const { album, error: fetchError } = await fetchAlbumRef.current(albumUrl)
         if (cancelled || abort.signal.aborted) return
 
@@ -217,6 +251,35 @@ function AlbumProcessingScreen({
           markProcessingFailed(processingKey)
           return
         }
+
+        const qualityContext: QualityTelemetryContext = {
+          runId: qualityRunId,
+          sessionId: getOrCreateSessionId(),
+          provider,
+          albumUrl,
+          referenceSource: referenceSourceRef.current,
+          pipelineMode: mode === 'index-only'
+            ? 'index-only'
+            : album.totalImages >= ASYNC_JOB_MIN_PHOTOS
+              ? 'async'
+              : 'sync',
+          eventCategory: eventCategoryRef.current,
+          repeatSearch: consumeRepeatSearchFlag(),
+          retriedReference: initialRetry,
+          userId: userIdRef.current,
+        }
+
+        void recordQualityRunStarted({
+          runId: qualityRunId,
+          provider,
+          albumUrl,
+          referenceSource: referenceSourceRef.current,
+          pipelineMode: qualityContext.pipelineMode,
+          eventCategory: eventCategoryRef.current,
+          repeatSearch: qualityContext.repeatSearch,
+          retriedReference: initialRetry,
+          msAlbumFetch: Date.now() - fetchStarted,
+        })
 
         setFetchedAlbum(album)
         setImageCount(album.totalImages)
@@ -232,6 +295,7 @@ function AlbumProcessingScreen({
           setProgress(28)
           setPhase('preloading')
           setStatusLine('Preparando miniaturas...')
+          preloadStartedAtRef.current = Date.now()
 
           const thumbnailUrls = album.images.map((img) => getGalleryThumbnailUrl(img))
           setPreloadTotal(thumbnailUrls.length)
@@ -339,6 +403,7 @@ function AlbumProcessingScreen({
             }
           },
           () => cancelled || abort.signal.aborted,
+          qualityContext,
         )
 
         let searchResult = resumed
@@ -353,6 +418,7 @@ function AlbumProcessingScreen({
               eventCategory: eventCategoryRef.current,
               retry: retryCount > 0,
               shouldAbort: () => cancelled || abort.signal.aborted,
+              qualityContext,
               onProgress: ({ phase: searchPhase, message, current, total, matched, collectionReused: reused, asyncMode: isAsync, canLeaveScreen: leaveOk, progressPercent }) => {
                 if (cancelled || abort.signal.aborted) return
                 setRecognizePhase(searchPhase)
@@ -401,6 +467,15 @@ function AlbumProcessingScreen({
         setPhase('ready')
         setStatusLine('Preparando resultados...')
         markProcessingComplete(processingKey)
+
+        const msPreload = preloadStartedAtRef.current != null
+          ? Date.now() - preloadStartedAtRef.current
+          : undefined
+        const msTotal = runStartedAtRef.current != null
+          ? Date.now() - runStartedAtRef.current
+          : undefined
+        void recordQualityProcessingTiming({ runId: qualityRunId, msPreload, msTotal })
+
         setTimeout(() => onCompleteRef.current?.(searchResult.result), 400)
       } catch (err) {
         if (cancelled || abort.signal.aborted) return

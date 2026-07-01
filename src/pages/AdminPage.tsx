@@ -3,18 +3,19 @@ import { Link, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Users, Search, FolderOpen, Cloud, Cpu, DollarSign, AlertTriangle,
-  Shield, RefreshCw, Loader2, UserPlus,
+  Shield, RefreshCw, Loader2, UserPlus, BarChart3,
 } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { GlowOrbs } from '../components/effects/GlowOrbs'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
-import type { AdminMetrics } from '../types/admin'
+import type { AdminMetrics, QualityMetrics } from '../types/admin'
 import {
   addAdminByEmail,
   errorSourceLabel,
   fetchAdminMetrics,
+  fetchQualityMetrics,
   formatAdminDate,
   providerAdminLabel,
 } from '../lib/admin/adminClient'
@@ -78,6 +79,7 @@ function ProviderGrid({ searches, albums }: { searches: Record<string, number>; 
 export function AdminPage() {
   const [access, setAccess] = useState<'loading' | 'denied' | 'ready'>('loading')
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null)
+  const [qualityMetrics, setQualityMetrics] = useState<QualityMetrics | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [newAdminEmail, setNewAdminEmail] = useState('')
@@ -86,22 +88,28 @@ export function AdminPage() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setError(null)
     if (silent) setRefreshing(true)
-    const res = await fetchAdminMetrics()
+    const [metricsRes, qualityRes] = await Promise.all([
+      fetchAdminMetrics(),
+      fetchQualityMetrics(),
+    ])
     if (silent) setRefreshing(false)
-    if (!res.ok) {
-      if (res.error.code === 'AUTH_REQUIRED') {
+    if (!metricsRes.ok) {
+      if (metricsRes.error.code === 'AUTH_REQUIRED') {
         setAccess('denied')
         return
       }
-      if (res.error.code === 'NOT_FOUND') {
+      if (metricsRes.error.code === 'NOT_FOUND') {
         setAccess('denied')
         return
       }
-      setError(res.error.message)
+      setError(metricsRes.error.message)
       setAccess('ready')
       return
     }
-    setMetrics(res.metrics)
+    setMetrics(metricsRes.metrics)
+    if (qualityRes.ok) {
+      setQualityMetrics(qualityRes.metrics)
+    }
     setAccess('ready')
   }, [])
 
@@ -252,6 +260,110 @@ export function AdminPage() {
                 )}
               </div>
             </Section>
+
+            {qualityMetrics && (
+              <Section title="Calidad del reconocimiento" icon={BarChart3}>
+                <p className="text-xs text-text-muted">
+                  Umbral configurado: {qualityMetrics.configuredThreshold}% · Telemetría desde migración 009
+                </p>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+                  <MetricCard label="Ejecuciones" value={qualityMetrics.runs.total} />
+                  <MetricCard label="Completadas" value={qualityMetrics.runs.completed} />
+                  <MetricCard label="Abandonadas" value={qualityMetrics.runs.abandoned} />
+                  <MetricCard label="Cero resultados" value={qualityMetrics.runs.zeroResults} />
+                  <MetricCard label="Prom. coincidencias" value={qualityMetrics.runs.avgMatchesFound} />
+                  <MetricCard label="Prom. descargas" value={qualityMetrics.runs.avgDownloads} />
+                  <MetricCard label="Descarga inmediata" value={qualityMetrics.runs.immediateDownloads} />
+                  <MetricCard label="Búsquedas repetidas" value={qualityMetrics.runs.repeatSearches} />
+                  <MetricCard
+                    label="Prom. similitud máx."
+                    value={qualityMetrics.runs.avgSimilarityMax ?? '—'}
+                  />
+                  <MetricCard
+                    label="Prom. tiempo total"
+                    value={qualityMetrics.runs.avgMsTotal != null ? `${Math.round(qualityMetrics.runs.avgMsTotal / 1000)}s` : '—'}
+                  />
+                  <MetricCard label="Collection search" value={qualityMetrics.runs.collectionSearch} />
+                  <MetricCard label="Compare fallback" value={qualityMetrics.runs.compareFallback} />
+                </div>
+
+                {qualityMetrics.byProvider.length > 0 && (
+                  <div className="glass rounded-2xl p-5 border border-border/50 mt-4 overflow-x-auto">
+                    <p className="text-sm font-medium mb-3">Por proveedor</p>
+                    <table className="w-full text-sm min-w-[520px]">
+                      <thead>
+                        <tr className="text-left text-text-muted border-b border-border/50">
+                          <th className="pb-2 pr-3">Proveedor</th>
+                          <th className="pb-2 pr-3">Runs</th>
+                          <th className="pb-2 pr-3">Prom. matches</th>
+                          <th className="pb-2 pr-3">Cero result.</th>
+                          <th className="pb-2">Con descarga</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityMetrics.byProvider.map((row) => (
+                          <tr key={row.provider} className="border-b border-border/30 last:border-0">
+                            <td className="py-2 pr-3">{providerAdminLabel(row.provider)}</td>
+                            <td className="py-2 pr-3">{row.runs}</td>
+                            <td className="py-2 pr-3">{row.avgMatches}</td>
+                            <td className="py-2 pr-3">{row.zeroResults}</td>
+                            <td className="py-2">{row.withDownloads}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="grid lg:grid-cols-2 gap-4 mt-4">
+                  <div className="glass rounded-2xl p-5 border border-border/50">
+                    <p className="text-sm font-medium mb-3">Agrupación Premium</p>
+                    <p className="text-sm text-text-muted">
+                      Snapshots: {qualityMetrics.grouping.totalSnapshots}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Prom. grupos visibles: {qualityMetrics.grouping.avgVisibleGroups}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Prom. fusionados: {qualityMetrics.grouping.avgGroupsMerged}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Prom. sin agrupar: {qualityMetrics.grouping.avgUngroupedFaces}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Prom. baja confianza: {qualityMetrics.grouping.avgLowConfidenceGroups}
+                    </p>
+                  </div>
+                  <div className="glass rounded-2xl p-5 border border-border/50 overflow-x-auto">
+                    <p className="text-sm font-medium mb-3">Runs recientes</p>
+                    {qualityMetrics.recentRuns.length === 0 ? (
+                      <p className="text-sm text-text-muted">Sin telemetría todavía.</p>
+                    ) : (
+                      <table className="w-full text-sm min-w-[480px]">
+                        <thead>
+                          <tr className="text-left text-text-muted border-b border-border/50">
+                            <th className="pb-2 pr-3">Método</th>
+                            <th className="pb-2 pr-3">Matches</th>
+                            <th className="pb-2 pr-3">Desc.</th>
+                            <th className="pb-2">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {qualityMetrics.recentRuns.map((run) => (
+                            <tr key={run.runId} className="border-b border-border/30 last:border-0">
+                              <td className="py-2 pr-3 text-xs">{run.searchMethod ?? '—'}</td>
+                              <td className="py-2 pr-3">{run.matchesFound}</td>
+                              <td className="py-2 pr-3">{run.imagesDownloaded}</td>
+                              <td className="py-2 text-xs text-text-muted">{run.outcome}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </Section>
+            )}
 
             <Section title="Álbumes" icon={FolderOpen}>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">

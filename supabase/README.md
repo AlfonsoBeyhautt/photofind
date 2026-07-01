@@ -32,7 +32,9 @@ Luego ejecutá también:
 
 Esto crea la tabla `public.search_history` para búsquedas y álbumes procesados en el dashboard.
 
-Luego ejecutá también las migraciones `003`–`008` (ver lista en `supabase/README.md`).
+Luego ejecutá también las migraciones `003`–`009` en orden (ver archivos en `supabase/migrations/`).
+
+La migración `009_recognition_quality_telemetry.sql` crea las tablas `recognition_quality_runs` y `recognition_grouping_quality` para telemetría de calidad del reconocimiento (sin datos biométricos).
 
 ## 3b. Panel de administración (`/admin`)
 

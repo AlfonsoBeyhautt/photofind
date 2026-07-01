@@ -3,6 +3,7 @@ import type { RecognitionSearchResult } from '../../types/recognition'
 import { clearActiveAlbumJob, getActiveAlbumJob, saveActiveAlbumJob } from './albumJobStorage'
 import { compareAlbumToReference, getRecognitionSearchErrorMessage, indexAlbumWithCollection, searchAlbumWithCollection, type SearchProgressUpdate } from './searchClient'
 import { getOrCreateSessionId } from './sessionId'
+import { buildQualityTelemetryPayload, type QualityTelemetryContext } from '../telemetry/qualityClient'
 
 /** Must match server ASYNC_JOB_MIN_PHOTOS */
 export const ASYNC_JOB_MIN_PHOTOS = 500
@@ -128,11 +129,18 @@ async function searchJobCollection(input: {
   collectionId: string
   albumTotal: number
   collectionReused: boolean
+  qualityContext?: QualityTelemetryContext
 }): Promise<JobSearchSuccess | JobStartFailure> {
   const res = await fetch('/api/recognize/album-job-search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      qualityTelemetry: buildQualityTelemetryPayload(input.qualityContext)
+        ? { ...buildQualityTelemetryPayload(input.qualityContext), pipelineMode: input.qualityContext?.pipelineMode ?? 'async' }
+        : undefined,
+      qualityContext: undefined,
+    }),
   })
   return (await res.json()) as JobSearchSuccess | JobStartFailure
 }
@@ -294,9 +302,11 @@ export async function runAlbumSearchPipeline(
     onProgress?: (update: AlbumJobProgressUpdate) => void
     shouldAbort?: () => boolean
     retry?: boolean
+    qualityContext?: QualityTelemetryContext
   },
 ): Promise<{ ok: true; result: RecognitionSearchResult } | { ok: false; message: string; canRetry?: boolean }> {
   const onProgress = options?.onProgress
+  const qualityContext = options?.qualityContext
 
   onProgress?.({
     phase: 'checking',
@@ -319,12 +329,12 @@ export async function runAlbumSearchPipeline(
         total: u.total,
         matched: u.matched,
       })
-    })
+    }, qualityContext)
   }
 
   if (!start.ok) {
     if (start.error.fallbackAvailable !== false && album.totalImages < ASYNC_JOB_MIN_PHOTOS) {
-      return compareAlbumToReference(referenceToken, album.images)
+      return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
     }
     return {
       ok: false,
@@ -334,7 +344,7 @@ export async function runAlbumSearchPipeline(
   }
 
   if (start.mode === 'sync') {
-    return searchAlbumWithCollection(referenceToken, album, albumUrl, onProgress, options?.eventCategory)
+    return searchAlbumWithCollection(referenceToken, album, albumUrl, onProgress, options?.eventCategory, qualityContext)
   }
 
   if (start.mode === 'collection_ready') {
@@ -386,12 +396,13 @@ export async function runAlbumSearchPipeline(
       collectionId: start.collectionId,
       albumTotal: album.totalImages,
       collectionReused: start.collectionReused,
+      qualityContext,
     })
   } catch {
     if (album.totalImages >= ASYNC_JOB_MIN_PHOTOS) {
       return { ok: false, message: 'No pudimos buscar coincidencias. Reintentá en unos minutos.', canRetry: true }
     }
-    return compareAlbumToReference(referenceToken, album.images)
+    return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
   }
 
   if (!search.ok) {
@@ -405,7 +416,7 @@ export async function runAlbumSearchPipeline(
         canRetry: true,
       }
     }
-    return compareAlbumToReference(referenceToken, album.images)
+    return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
   }
 
   clearActiveAlbumJob()
@@ -437,6 +448,7 @@ export async function resumeStoredAlbumJob(
   album: AlbumData,
   onProgress?: (update: AlbumJobProgressUpdate) => void,
   shouldAbort?: () => boolean,
+  qualityContext?: QualityTelemetryContext,
 ): Promise<{ ok: true; result: RecognitionSearchResult } | { ok: false; message: string; canRetry?: boolean } | null> {
   const stored = getActiveAlbumJob(albumUrl)
   if (!stored || stored.referenceToken !== referenceToken) return null
@@ -463,6 +475,7 @@ export async function resumeStoredAlbumJob(
       collectionId: stored.collectionId,
       albumTotal: stored.totalImages,
       collectionReused: stored.collectionReused,
+      qualityContext,
     })
 
     if (!search.ok) {
@@ -510,7 +523,7 @@ export async function resumeStoredAlbumJob(
 
   if (!loopResult.ok) return loopResult
 
-  return runAlbumSearchPipeline(referenceToken, album, albumUrl, { onProgress, shouldAbort })
+  return runAlbumSearchPipeline(referenceToken, album, albumUrl, { onProgress, shouldAbort, qualityContext })
 }
 
 /** Index album Collection without SearchFacesByImage — for Premium person grouping. */

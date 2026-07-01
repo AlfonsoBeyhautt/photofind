@@ -478,6 +478,7 @@ export async function searchAlbumJob(input: {
   collectionId: string
   albumTotal: number
   collectionReused: boolean
+  qualityTelemetry?: import('../telemetry/qualityTelemetryTypes').QualityTelemetryInput
 }): Promise<CollectionSearchResult> {
   if (input.jobId) {
     const job = await getAlbumProcessingJobById(input.jobId)
@@ -502,6 +503,7 @@ export async function searchAlbumJob(input: {
     collectionId: input.collectionId,
     albumTotal: input.albumTotal,
     collectionReused: input.collectionReused,
+    qualityTelemetry: input.qualityTelemetry,
   })
 }
 

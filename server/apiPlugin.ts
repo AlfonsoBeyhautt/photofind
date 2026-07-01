@@ -62,7 +62,9 @@ import {
   handleAdminAddAdminRequest,
   handleAdminListAdminsRequest,
   handleAdminMetricsRequest,
+  handleAdminQualityMetricsRequest,
 } from './admin/adminHandler'
+import { handleQualityTelemetryRequest } from './telemetry/telemetryHandler'
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -162,6 +164,10 @@ export function driveApiPlugin(): Plugin {
             }
             if (req.url === '/api/admin/admins' && req.method === 'POST') {
               await handleAdminAddAdminRequest(req, res, body)
+              return
+            }
+            if (req.url === '/api/admin/quality-metrics' && req.method === 'GET') {
+              await handleAdminQualityMetricsRequest(req, res)
               return
             }
           } catch {
@@ -466,6 +472,19 @@ export function driveApiPlugin(): Plugin {
             sendJson(res, 500, {
               ok: false,
               error: { code: 'REFERENCE_VALIDATION_FAILED', message: 'No pudimos validar la foto de referencia.' },
+            })
+          }
+          return
+        }
+
+        if (req.url === '/api/telemetry/quality' && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handleQualityTelemetryRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'TELEMETRY_FAILED', message: 'No pudimos registrar la telemetría.' },
             })
           }
           return

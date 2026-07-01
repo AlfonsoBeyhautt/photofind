@@ -3,6 +3,8 @@ import { COMPARE_PHASE_MAX_PHOTOS, SIMILARITY_THRESHOLD } from './config'
 import { fetchAlbumImageForRekognition } from './albumImageFetcher'
 import { canUseRekognition, compareFaces } from './rekognitionClient'
 import { getReference } from './referenceStore'
+import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
+import { recordCompareFallbackOutcome } from '../telemetry/qualityTelemetryService'
 
 export type CompareSearchErrorCode =
   | 'AWS_CREDENTIALS_MISSING'
@@ -65,13 +67,42 @@ export async function compareAlbumToReference(
   referenceToken: string,
   images: AlbumImage[],
   onProgress?: (progress: CompareProgress) => void,
+  qualityTelemetry?: QualityTelemetryInput,
 ): Promise<CompareAlbumResult> {
   if (!canUseRekognition()) {
+    void recordCompareFallbackOutcome({
+      runId: qualityTelemetry?.runId,
+      userId: qualityTelemetry?.userId,
+      sessionId: qualityTelemetry?.sessionId,
+      provider: qualityTelemetry?.provider,
+      albumUrl: qualityTelemetry?.albumUrl,
+      imagesAnalyzed: 0,
+      matches: [],
+      compareFacesCalls: 0,
+      referenceSource: qualityTelemetry?.referenceSource,
+      eventCategory: qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'AWS_CREDENTIALS_MISSING',
+    })
     return fail('AWS_CREDENTIALS_MISSING')
   }
 
   const reference = getReference(referenceToken)
   if (!reference) {
+    void recordCompareFallbackOutcome({
+      runId: qualityTelemetry?.runId,
+      userId: qualityTelemetry?.userId,
+      sessionId: qualityTelemetry?.sessionId,
+      provider: qualityTelemetry?.provider,
+      albumUrl: qualityTelemetry?.albumUrl,
+      imagesAnalyzed: 0,
+      matches: [],
+      compareFacesCalls: 0,
+      referenceSource: qualityTelemetry?.referenceSource,
+      eventCategory: qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'RECOGNITION_REFERENCE_EXPIRED',
+    })
     return fail('RECOGNITION_REFERENCE_EXPIRED')
   }
 
@@ -82,6 +113,7 @@ export async function compareAlbumToReference(
   const matches: CompareAlbumMatch[] = []
   let fetchFailures = 0
   let facesCompared = 0
+  const searchStarted = Date.now()
 
   for (let i = 0; i < toAnalyze.length; i++) {
     const image = toAnalyze[i]
@@ -108,6 +140,21 @@ export async function compareAlbumToReference(
       }
     } catch (error) {
       console.error('[PhotoFind:Compare] CompareFaces failed:', image.id, error instanceof Error ? error.message : error)
+      void recordCompareFallbackOutcome({
+        runId: qualityTelemetry?.runId,
+        userId: qualityTelemetry?.userId,
+        sessionId: qualityTelemetry?.sessionId,
+        provider: qualityTelemetry?.provider,
+        albumUrl: qualityTelemetry?.albumUrl,
+        imagesAnalyzed: facesCompared,
+        matches,
+        compareFacesCalls: facesCompared,
+        msSearch: Date.now() - searchStarted,
+        referenceSource: qualityTelemetry?.referenceSource,
+        eventCategory: qualityTelemetry?.eventCategory,
+        failed: true,
+        fallbackReason: 'AWS_REKOGNITION_ERROR',
+      })
       return fail('AWS_REKOGNITION_ERROR')
     }
   }
@@ -115,10 +162,40 @@ export async function compareAlbumToReference(
   onProgress?.({ analyzed: toAnalyze.length, total: toAnalyze.length, matched: matches.length })
 
   if (facesCompared === 0 && fetchFailures === toAnalyze.length && toAnalyze.length > 0) {
+    void recordCompareFallbackOutcome({
+      runId: qualityTelemetry?.runId,
+      userId: qualityTelemetry?.userId,
+      sessionId: qualityTelemetry?.sessionId,
+      provider: qualityTelemetry?.provider,
+      albumUrl: qualityTelemetry?.albumUrl,
+      imagesAnalyzed: 0,
+      matches: [],
+      compareFacesCalls: 0,
+      msSearch: Date.now() - searchStarted,
+      referenceSource: qualityTelemetry?.referenceSource,
+      eventCategory: qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'RECOGNITION_INDEXING_FAILED',
+    })
     return fail('RECOGNITION_INDEXING_FAILED')
   }
 
   const matchedImageIds = matches.map((m) => m.imageId)
+
+  void recordCompareFallbackOutcome({
+    runId: qualityTelemetry?.runId,
+    userId: qualityTelemetry?.userId,
+    sessionId: qualityTelemetry?.sessionId,
+    provider: qualityTelemetry?.provider,
+    albumUrl: qualityTelemetry?.albumUrl,
+    imagesAnalyzed: toAnalyze.length,
+    matches,
+    compareFacesCalls: facesCompared,
+    msSearch: Date.now() - searchStarted,
+    referenceSource: qualityTelemetry?.referenceSource,
+    eventCategory: qualityTelemetry?.eventCategory,
+    fallbackReason: qualityTelemetry?.fallbackReason,
+  })
 
   return {
     ok: true,

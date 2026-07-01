@@ -2,9 +2,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AlbumImage } from '../../src/types/album'
 import { compareAlbumToReference } from './compareSearchService'
 
+import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
+
 interface CompareAlbumBody {
   referenceToken?: string
   images?: AlbumImage[]
+  qualityTelemetry?: QualityTelemetryInput
 }
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
@@ -29,7 +32,7 @@ export async function handleCompareAlbumRequest(
     return
   }
 
-  const { referenceToken, images } = body
+  const { referenceToken, images, qualityTelemetry } = body
   if (!referenceToken || !Array.isArray(images) || images.length === 0) {
     sendJson(res, 400, {
       ok: false,
@@ -38,6 +41,6 @@ export async function handleCompareAlbumRequest(
     return
   }
 
-  const result = await compareAlbumToReference(referenceToken, images)
+  const result = await compareAlbumToReference(referenceToken, images, undefined, qualityTelemetry)
   sendJson(res, result.ok ? 200 : 400, result)
 }

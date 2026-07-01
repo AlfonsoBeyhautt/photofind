@@ -13,6 +13,7 @@ import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { recordSearch } from '../lib/auth/authClient'
 import { resetAllProcessingRuns } from '../lib/processing/processingRunGuard'
+import { markNextSearchAsRepeat } from '../lib/telemetry/qualityClient'
 import type { EventCategory } from '../lib/eventCategories'
 import type {
   DashboardStartSearchState,
@@ -39,6 +40,7 @@ export function HomePage() {
   const [flowData, setFlowData] = useState<FlowData | null>(null)
   const [searchResult, setSearchResult] = useState<RecognitionSearchResult | null>(null)
   const [initialRetry, setInitialRetry] = useState(false)
+  const [qualityRunId, setQualityRunId] = useState<string | null>(null)
 
   useEffect(() => {
     const resume = (location.state as { resumeAlbumJob?: ResumeAlbumJobState } | null)?.resumeAlbumJob
@@ -201,11 +203,13 @@ export function HomePage() {
   }, [flowData?.albumUrl, navigate])
 
   const handleRestart = useCallback(() => {
+    markNextSearchAsRepeat()
     resetAllProcessingRuns()
     resetAlbum()
     setStep('hero')
     setFlowData(null)
     setSearchResult(null)
+    setQualityRunId(null)
     setInitialRetry(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [resetAlbum])
@@ -250,6 +254,8 @@ export function HomePage() {
               qualityWarning={flowData.qualityWarning}
               userId={user?.id ?? null}
               initialRetry={initialRetry}
+              referenceSource={flowData.method}
+              onQualityRunStarted={setQualityRunId}
               onComplete={handleProcessingComplete}
               onError={handleProcessingError}
             />
@@ -261,6 +267,7 @@ export function HomePage() {
               category={flowData.category ?? null}
               searchResult={searchResult}
               qualityWarning={flowData.qualityWarning}
+              qualityRunId={qualityRunId}
               onRestart={handleRestart}
             />
           )}

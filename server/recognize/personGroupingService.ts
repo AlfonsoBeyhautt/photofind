@@ -47,6 +47,7 @@ import {
   updatePersonGrouping,
   upsertPersonGroupingAccess,
 } from '../supabase/personGroupingStore'
+import { recordGroupingQualitySnapshot } from '../telemetry/qualityTelemetryService'
 
 export type PersonGroupingErrorCode =
   | 'PERSON_GROUPING_DISABLED'
@@ -658,6 +659,17 @@ async function finalizeGrouping(
   }
 
   console.log('[PhotoFind:PersonGroups] clustering_complete', clusteringStats)
+
+  const ungroupedFacesCount = groupsToInsert
+    .filter((g) => !g.isVisible)
+    .reduce((sum, g) => sum + g.faceInstanceCount, 0)
+
+  void recordGroupingQualitySnapshot({
+    groupingId: row.id,
+    provider: collection.provider,
+    ungroupedFacesCount,
+    stats: clusteringStats,
+  })
 
   return updatePersonGrouping(row.id, {
     status: 'ready',

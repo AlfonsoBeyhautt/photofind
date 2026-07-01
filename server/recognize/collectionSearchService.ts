@@ -35,6 +35,8 @@ import {
   updateAlbumCollectionProgress,
   type AlbumCollectionRow,
 } from '../supabase/albumCollectionStore'
+import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
+import { recordCollectionSearchOutcome } from '../telemetry/qualityTelemetryService'
 
 export type CollectionSearchErrorCode =
   | 'AWS_CREDENTIALS_MISSING'
@@ -451,25 +453,88 @@ export async function searchAlbumCollection(input: {
   collectionId: string
   albumTotal: number
   collectionReused: boolean
+  qualityTelemetry?: QualityTelemetryInput
 }): Promise<CollectionSearchResult> {
   if (!canUseRekognition()) {
+    void recordCollectionSearchOutcome({
+      runId: input.qualityTelemetry?.runId,
+      userId: input.qualityTelemetry?.userId,
+      sessionId: input.qualityTelemetry?.sessionId,
+      provider: input.qualityTelemetry?.provider,
+      albumUrl: input.qualityTelemetry?.albumUrl,
+      collectionReused: input.collectionReused,
+      imagesAnalyzed: 0,
+      matches: [],
+      pipelineMode: input.qualityTelemetry?.pipelineMode,
+      referenceSource: input.qualityTelemetry?.referenceSource,
+      eventCategory: input.qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: input.qualityTelemetry?.fallbackReason ?? 'AWS_CREDENTIALS_MISSING',
+    })
     return fail('AWS_CREDENTIALS_MISSING')
   }
 
   const reference = getReference(input.referenceToken)
   if (!reference) {
+    void recordCollectionSearchOutcome({
+      runId: input.qualityTelemetry?.runId,
+      userId: input.qualityTelemetry?.userId,
+      sessionId: input.qualityTelemetry?.sessionId,
+      provider: input.qualityTelemetry?.provider,
+      albumUrl: input.qualityTelemetry?.albumUrl,
+      collectionReused: input.collectionReused,
+      imagesAnalyzed: 0,
+      matches: [],
+      pipelineMode: input.qualityTelemetry?.pipelineMode,
+      referenceSource: input.qualityTelemetry?.referenceSource,
+      eventCategory: input.qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'RECOGNITION_REFERENCE_EXPIRED',
+    })
     return fail('RECOGNITION_REFERENCE_EXPIRED', undefined, false)
   }
 
   if (!isAlbumCollectionStoreAvailable()) {
+    void recordCollectionSearchOutcome({
+      runId: input.qualityTelemetry?.runId,
+      userId: input.qualityTelemetry?.userId,
+      sessionId: input.qualityTelemetry?.sessionId,
+      provider: input.qualityTelemetry?.provider,
+      albumUrl: input.qualityTelemetry?.albumUrl,
+      collectionReused: input.collectionReused,
+      imagesAnalyzed: 0,
+      matches: [],
+      pipelineMode: input.qualityTelemetry?.pipelineMode,
+      referenceSource: input.qualityTelemetry?.referenceSource,
+      eventCategory: input.qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'RECOGNITION_COLLECTION_METADATA_ERROR',
+    })
     return fail('RECOGNITION_COLLECTION_METADATA_ERROR')
   }
 
+  const searchStarted = Date.now()
   let faceMatches: { faceId: string; similarity: number }[]
   try {
     faceMatches = await searchFacesByImage(input.collectionId, reference.buffer)
   } catch (error) {
     console.error('[PhotoFind:Collections] search_failed', error instanceof Error ? error.message : error)
+    void recordCollectionSearchOutcome({
+      runId: input.qualityTelemetry?.runId,
+      userId: input.qualityTelemetry?.userId,
+      sessionId: input.qualityTelemetry?.sessionId,
+      provider: input.qualityTelemetry?.provider,
+      albumUrl: input.qualityTelemetry?.albumUrl,
+      collectionReused: input.collectionReused,
+      imagesAnalyzed: 0,
+      matches: [],
+      msSearch: Date.now() - searchStarted,
+      pipelineMode: input.qualityTelemetry?.pipelineMode,
+      referenceSource: input.qualityTelemetry?.referenceSource,
+      eventCategory: input.qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'AWS_REKOGNITION_ERROR',
+    })
     return fail('AWS_REKOGNITION_ERROR')
   }
 
@@ -498,6 +563,26 @@ export async function searchAlbumCollection(input: {
   }))
 
   const indexedImages = await countDistinctIndexedImages(input.albumCollectionId)
+  const indexedFaces = await countIndexedFaces(input.albumCollectionId)
+  const msSearch = Date.now() - searchStarted
+
+  void recordCollectionSearchOutcome({
+    runId: input.qualityTelemetry?.runId,
+    userId: input.qualityTelemetry?.userId,
+    sessionId: input.qualityTelemetry?.sessionId,
+    provider: input.qualityTelemetry?.provider,
+    albumUrl: input.qualityTelemetry?.albumUrl,
+    collectionReused: input.collectionReused,
+    imagesAnalyzed: indexedImages,
+    facesIndexed: indexedFaces,
+    matches,
+    msSearch,
+    msIndexing: input.qualityTelemetry?.msIndexing,
+    pipelineMode: input.qualityTelemetry?.pipelineMode,
+    referenceSource: input.qualityTelemetry?.referenceSource,
+    eventCategory: input.qualityTelemetry?.eventCategory,
+    fallbackReason: input.qualityTelemetry?.fallbackReason,
+  })
 
   console.log('[PhotoFind:Collections] search_complete', {
     collectionId: input.collectionId,

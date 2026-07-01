@@ -64,7 +64,9 @@ import {
   handleAdminAddAdminRequest,
   handleAdminListAdminsRequest,
   handleAdminMetricsRequest,
+  handleAdminQualityMetricsRequest,
 } from './admin/adminHandler'
+import { handleQualityTelemetryRequest } from './telemetry/telemetryHandler'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -496,6 +498,30 @@ export function createApp(options: CreateAppOptions = {}): Express {
       res.status(500).json({
         ok: false,
         error: { code: 'ADMIN_GRANT_FAILED', message: 'No pudimos autorizar al administrador.' },
+      })
+    }
+  })
+
+  app.get('/api/admin/quality-metrics', async (req, res) => {
+    try {
+      await handleAdminQualityMetricsRequest(req, res)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] admin_quality_metrics_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ADMIN_QUALITY_METRICS_FAILED', message: 'No pudimos cargar las métricas de calidad.' },
+      })
+    }
+  })
+
+  app.post('/api/telemetry/quality', async (req, res) => {
+    try {
+      await handleQualityTelemetryRequest(req, res, JSON.stringify(req.body ?? {}))
+    } catch (err) {
+      console.error('[PhotoFind:Backend] telemetry_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'TELEMETRY_FAILED', message: 'No pudimos registrar la telemetría.' },
       })
     }
   })

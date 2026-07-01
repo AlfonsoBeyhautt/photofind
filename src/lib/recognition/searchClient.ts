@@ -1,5 +1,10 @@
 import type { AlbumData, AlbumImage } from '../../types/album'
 import type { RecognitionSearchResult } from '../../types/recognition'
+import {
+  buildQualityTelemetryPayload,
+  recordQualityCompareOutcome,
+  type QualityTelemetryContext,
+} from '../telemetry/qualityClient'
 
 const COMPARE_BATCH_SIZE = 5
 const COMPARE_PHASE_MAX_PHOTOS = 50
@@ -111,24 +116,43 @@ export async function compareAlbumToReference(
   referenceToken: string,
   images: AlbumImage[],
   onProgress?: (update: { compared: number; total: number; matched: number }) => void,
+  qualityContext?: QualityTelemetryContext,
 ): Promise<{ ok: true; result: RecognitionSearchResult } | { ok: false; message: string }> {
   const albumTotal = images.length
   const toAnalyze = images.slice(0, COMPARE_PHASE_MAX_PHOTOS)
   const truncated = albumTotal > COMPARE_PHASE_MAX_PHOTOS
 
   const allMatches = new Map<string, number>()
+  const searchStarted = Date.now()
+  let compareFacesCalls = 0
 
   for (let i = 0; i < toAnalyze.length; i += COMPARE_BATCH_SIZE) {
     const batch = toAnalyze.slice(i, i + COMPARE_BATCH_SIZE)
     const response = await compareBatch(referenceToken, batch)
 
     if (!response.ok) {
+      if (qualityContext) {
+        void recordQualityCompareOutcome({
+          runId: qualityContext.runId,
+          provider: qualityContext.provider,
+          albumUrl: qualityContext.albumUrl,
+          referenceSource: qualityContext.referenceSource,
+          eventCategory: qualityContext.eventCategory,
+          imagesAnalyzed: Math.min(i + batch.length, toAnalyze.length),
+          matches: [...allMatches.entries()].map(([, similarity]) => ({ similarity })),
+          compareFacesCalls,
+          msSearch: Date.now() - searchStarted,
+          fallbackReason: response.error.code,
+          failed: true,
+        })
+      }
       return {
         ok: false,
         message: getRecognitionSearchErrorMessage(response.error.code, response.error.message),
       }
     }
 
+    compareFacesCalls += batch.length
     for (const match of response.matches) {
       const prev = allMatches.get(match.imageId) ?? 0
       if (match.similarity > prev) {
@@ -141,6 +165,21 @@ export async function compareAlbumToReference(
       compared,
       total: toAnalyze.length,
       matched: allMatches.size,
+    })
+  }
+
+  if (qualityContext) {
+    void recordQualityCompareOutcome({
+      runId: qualityContext.runId,
+      provider: qualityContext.provider,
+      albumUrl: qualityContext.albumUrl,
+      referenceSource: qualityContext.referenceSource,
+      eventCategory: qualityContext.eventCategory,
+      imagesAnalyzed: toAnalyze.length,
+      matches: [...allMatches.entries()].map(([, similarity]) => ({ similarity })),
+      compareFacesCalls,
+      msSearch: Date.now() - searchStarted,
+      fallbackReason: 'collection_fallback',
     })
   }
 
@@ -188,6 +227,7 @@ export async function searchAlbumWithCollection(
   albumUrl: string,
   onProgress?: (update: SearchProgressUpdate) => void,
   eventCategory?: string | null,
+  qualityContext?: QualityTelemetryContext,
 ): Promise<{ ok: true; result: RecognitionSearchResult } | { ok: false; message: string }> {
   onProgress?.({
     phase: 'checking',
@@ -219,7 +259,7 @@ export async function searchAlbumWithCollection(
         total: u.total,
         matched: u.matched,
       })
-    })
+    }, qualityContext)
   }
 
   if (!prepare.ok) {
@@ -233,7 +273,7 @@ export async function searchAlbumWithCollection(
           total: u.total,
           matched: u.matched,
         })
-      })
+      }, qualityContext)
       if (fallback.ok) {
         fallback.result.largeAlbumWarning = prepare.error.message
       }
@@ -269,6 +309,7 @@ export async function searchAlbumWithCollection(
 
   let indexedImages = prepare.indexedImages
   let indexedFaces = prepare.indexedFaces
+  const indexStarted = imagesToIndex.length > 0 ? Date.now() : null
 
   for (let i = 0; i < imagesToIndex.length; i += INDEX_BATCH_SIZE) {
     const batch = imagesToIndex.slice(i, i + INDEX_BATCH_SIZE)
@@ -294,13 +335,13 @@ export async function searchAlbumWithCollection(
       indexResult = (await res.json()) as IndexBatchApiSuccess | IndexBatchApiFailure
     } catch {
       console.warn('[PhotoFind:Search] collection_index_network_error, falling back')
-      return compareAlbumToReference(referenceToken, album.images)
+      return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
     }
 
     if (!indexResult.ok) {
       if (indexResult.error.fallbackAvailable !== false) {
         console.warn('[PhotoFind:Search] collection_index_failed, falling back', indexResult.error.code)
-        return compareAlbumToReference(referenceToken, album.images)
+        return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
       }
       return {
         ok: false,
@@ -327,6 +368,9 @@ export async function searchAlbumWithCollection(
     collectionReused: prepare.reused,
   })
 
+  const msIndexing = indexStarted != null ? Date.now() - indexStarted : undefined
+  const telemetryPayload = buildQualityTelemetryPayload(qualityContext)
+
   let search: SearchCollectionApiSuccess | SearchCollectionApiFailure
   try {
     const res = await fetch('/api/recognize/collection-search', {
@@ -338,18 +382,21 @@ export async function searchAlbumWithCollection(
         collectionId: prepare.collectionId,
         albumTotal: album.totalImages,
         collectionReused: prepare.reused,
+        qualityTelemetry: telemetryPayload
+          ? { ...telemetryPayload, msIndexing, pipelineMode: qualityContext?.pipelineMode ?? 'sync' }
+          : undefined,
       }),
     })
     search = (await res.json()) as SearchCollectionApiSuccess | SearchCollectionApiFailure
   } catch {
     console.warn('[PhotoFind:Search] collection_search_network_error, falling back')
-    return compareAlbumToReference(referenceToken, album.images)
+    return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
   }
 
   if (!search.ok) {
     if (search.error.fallbackAvailable !== false) {
       console.warn('[PhotoFind:Search] collection_search_failed, falling back', search.error.code)
-      return compareAlbumToReference(referenceToken, album.images)
+      return compareAlbumToReference(referenceToken, album.images, undefined, qualityContext)
     }
     return {
       ok: false,

@@ -14,6 +14,7 @@ import type { AlbumData, AlbumImage } from '../../types/album'
 import type { RecognitionSearchResult } from '../../types/recognition'
 import { getProviderMeta } from '../../types/provider'
 import { getDownloadUrl } from '../../lib/images/imageUrls'
+import { recordQualityDownload, recordQualitySelection } from '../../lib/telemetry/qualityClient'
 import { cn } from '../../lib/utils'
 
 interface ResultsScreenProps {
@@ -21,6 +22,7 @@ interface ResultsScreenProps {
   category?: EventCategory | null
   searchResult: RecognitionSearchResult
   qualityWarning?: string
+  qualityRunId?: string | null
   onRestart: () => void
 }
 
@@ -29,11 +31,13 @@ export function ResultsScreen({
   category,
   searchResult,
   qualityWarning,
+  qualityRunId,
   onRestart,
 }: ResultsScreenProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [hasDownloaded, setHasDownloaded] = useState(false)
   const categoryLabel = category ? eventCategoryLabel(category) : null
   const providerLabel = getProviderMeta(album.source)?.label ?? album.source
 
@@ -51,11 +55,17 @@ export function ResultsScreen({
     if (next.has(id)) next.delete(id)
     else next.add(id)
     setSelected(next)
+    if (qualityRunId) {
+      void recordQualitySelection({ runId: qualityRunId, selectedCount: next.size })
+    }
   }
 
   const toggleAll = () => {
-    if (selected.size === images.length) setSelected(new Set())
-    else setSelected(new Set(images.map((img) => img.id)))
+    const next = selected.size === images.length ? new Set<string>() : new Set(images.map((img) => img.id))
+    setSelected(next)
+    if (qualityRunId) {
+      void recordQualitySelection({ runId: qualityRunId, selectedCount: next.size })
+    }
   }
 
   const openImage = (img: AlbumImage) => {
@@ -65,6 +75,15 @@ export function ResultsScreen({
 
   const downloadImages = (ids: string[]) => {
     const toDownload = images.filter((img) => ids.includes(img.id))
+    const immediate = !hasDownloaded
+    if (qualityRunId && toDownload.length > 0) {
+      void recordQualityDownload({
+        runId: qualityRunId,
+        count: toDownload.length,
+        immediate,
+      })
+      setHasDownloaded(true)
+    }
     for (const img of toDownload.slice(0, 5)) {
       const link = document.createElement('a')
       link.href = getDownloadUrl(img)
