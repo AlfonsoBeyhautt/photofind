@@ -56,6 +56,22 @@ export interface QualityMetricsPayload {
     collectionReused: boolean | null
     createdAt: string
   }>
+  imageFetch: {
+    runsWithData: number
+    avgMsFetch: number | null
+    avgImagesPerSecond: number | null
+    avgConcurrency: number | null
+    totalRequests: number
+    totalFailures: number
+    totalRetries: number
+    byProvider: Array<{
+      provider: string
+      runs: number
+      avgMsFetch: number | null
+      avgImagesPerSecond: number | null
+      totalFailures: number
+    }>
+  }
 }
 
 function avg(nums: number[]): number | null {
@@ -97,6 +113,43 @@ export async function fetchQualityMetrics(): Promise<QualityMetricsPayload> {
     zeroResults: list.filter((r) => r.outcome === 'completed' && r.matches_found === 0).length,
     withDownloads: list.filter((r) => r.images_downloaded > 0).length,
   })).sort((a, b) => b.runs - a.runs)
+
+  const runsWithFetch = runs.filter((r) => (r.ms_image_fetch ?? 0) > 0 || r.image_fetch_requests > 0)
+  const imagesPerSecond = runsWithFetch
+    .map((r) => {
+      const ms = r.ms_image_fetch ?? 0
+      const reqs = r.image_fetch_requests ?? 0
+      if (ms <= 0 || reqs <= 0) return null
+      return reqs / (ms / 1000)
+    })
+    .filter((n): n is number => n != null)
+
+  const fetchProviderMap = new Map<string, typeof runsWithFetch>()
+  for (const run of runsWithFetch) {
+    const key = run.provider || 'unknown'
+    const list = fetchProviderMap.get(key) ?? []
+    list.push(run)
+    fetchProviderMap.set(key, list)
+  }
+
+  const imageFetchByProvider = [...fetchProviderMap.entries()].map(([provider, list]) => {
+    const providerIps = list
+      .map((r) => {
+        const ms = r.ms_image_fetch ?? 0
+        const reqs = r.image_fetch_requests ?? 0
+        if (ms <= 0 || reqs <= 0) return null
+        return reqs / (ms / 1000)
+      })
+      .filter((n): n is number => n != null)
+
+    return {
+      provider,
+      runs: list.length,
+      avgMsFetch: avg(list.map((r) => r.ms_image_fetch).filter((n): n is number => n != null && n > 0)),
+      avgImagesPerSecond: avg(providerIps),
+      totalFailures: list.reduce((sum, r) => sum + (r.image_fetch_failures ?? 0), 0),
+    }
+  }).sort((a, b) => b.runs - a.runs)
 
   return {
     generatedAt: new Date().toISOString(),
@@ -146,5 +199,19 @@ export async function fetchQualityMetrics(): Promise<QualityMetricsPayload> {
       collectionReused: r.collection_reused,
       createdAt: r.created_at,
     })),
+    imageFetch: {
+      runsWithData: runsWithFetch.length,
+      avgMsFetch: avg(runsWithFetch.map((r) => r.ms_image_fetch).filter((n): n is number => n != null && n > 0)),
+      avgImagesPerSecond: avg(imagesPerSecond),
+      avgConcurrency: avg(
+        runsWithFetch
+          .map((r) => r.image_fetch_concurrency)
+          .filter((n): n is number => n != null && n > 0),
+      ),
+      totalRequests: runsWithFetch.reduce((sum, r) => sum + (r.image_fetch_requests ?? 0), 0),
+      totalFailures: runsWithFetch.reduce((sum, r) => sum + (r.image_fetch_failures ?? 0), 0),
+      totalRetries: runsWithFetch.reduce((sum, r) => sum + (r.image_fetch_retries ?? 0), 0),
+      byProvider: imageFetchByProvider,
+    },
   }
 }

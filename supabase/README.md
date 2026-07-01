@@ -36,6 +36,8 @@ Luego ejecutá también las migraciones `003`–`009` en orden (ver archivos en 
 
 La migración `009_recognition_quality_telemetry.sql` crea las tablas `recognition_quality_runs` y `recognition_grouping_quality` para telemetría de calidad del reconocimiento (sin datos biométricos).
 
+La migración `010_image_fetch_telemetry.sql` agrega columnas de métricas de fetch paralelo de imágenes a `recognition_quality_runs`.
+
 ## 3b. Panel de administración (`/admin`)
 
 1. Ejecutá `007_admin_users.sql`.

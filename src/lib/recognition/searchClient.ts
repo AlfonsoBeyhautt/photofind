@@ -330,6 +330,7 @@ export async function searchAlbumWithCollection(
           albumCollectionId: prepare.albumCollectionId,
           collectionId: prepare.collectionId,
           images: batch,
+          qualityRunId: qualityContext?.runId,
         }),
       })
       indexResult = (await res.json()) as IndexBatchApiSuccess | IndexBatchApiFailure

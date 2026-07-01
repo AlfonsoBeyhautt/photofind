@@ -25,6 +25,7 @@ interface IndexBatchBody {
   albumCollectionId?: string
   collectionId?: string
   images?: AlbumImage[]
+  qualityRunId?: string
 }
 
 import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
@@ -90,7 +91,7 @@ export async function handleIndexAlbumBatchRequest(
     return
   }
 
-  const { albumCollectionId, collectionId, images } = body
+  const { albumCollectionId, collectionId, images, qualityRunId } = body
   if (!albumCollectionId || !collectionId || !Array.isArray(images) || images.length === 0) {
     sendJson(res, 400, {
       ok: false,
@@ -99,7 +100,12 @@ export async function handleIndexAlbumBatchRequest(
     return
   }
 
-  const result = await indexAlbumBatch({ albumCollectionId, collectionId, images })
+  const result = await indexAlbumBatch({
+    albumCollectionId,
+    collectionId,
+    images,
+    qualityRunId,
+  })
   sendJson(res, result.ok ? 200 : 400, result)
 }
 

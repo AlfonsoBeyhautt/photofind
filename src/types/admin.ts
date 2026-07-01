@@ -157,6 +157,22 @@ export interface QualityMetrics {
     collectionReused: boolean | null
     createdAt: string
   }>
+  imageFetch: {
+    runsWithData: number
+    avgMsFetch: number | null
+    avgImagesPerSecond: number | null
+    avgConcurrency: number | null
+    totalRequests: number
+    totalFailures: number
+    totalRetries: number
+    byProvider: Array<{
+      provider: string
+      runs: number
+      avgMsFetch: number | null
+      avgImagesPerSecond: number | null
+      totalFailures: number
+    }>
+  }
 }
 
 export interface QualityMetricsResponse {

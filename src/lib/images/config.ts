@@ -1,5 +1,5 @@
 /** Max concurrent thumbnail requests during full-album preload */
-export const IMAGE_LOAD_CONCURRENCY = 6
+export { IMAGE_FETCH_DEFAULT_CONCURRENCY as IMAGE_LOAD_CONCURRENCY } from '../../config/imageFetch'
 
 export const THUMBNAIL_SIZE = 400
 

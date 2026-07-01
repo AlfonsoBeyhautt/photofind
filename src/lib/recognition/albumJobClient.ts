@@ -113,11 +113,15 @@ async function fetchJobStatus(jobId: string): Promise<{ ok: true; status: JobSta
   return (await res.json()) as { ok: true; status: JobStatusPayload } | JobStartFailure
 }
 
-async function processJobBatch(jobId: string, images: AlbumImage[]): Promise<JobProcessSuccess | JobStartFailure> {
+async function processJobBatch(
+  jobId: string,
+  images: AlbumImage[],
+  qualityRunId?: string,
+): Promise<JobProcessSuccess | JobStartFailure> {
   const res = await fetch('/api/recognize/album-job-process', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jobId, images }),
+    body: JSON.stringify({ jobId, images, qualityRunId }),
   })
   return (await res.json()) as JobProcessSuccess | JobStartFailure
 }
@@ -190,7 +194,7 @@ async function runAsyncJobLoop(
   start: JobStartSuccess,
   onProgress?: (update: AlbumJobProgressUpdate) => void,
   shouldAbort?: () => boolean,
-  options?: { persistJob?: boolean },
+  options?: { persistJob?: boolean; qualityRunId?: string },
 ): Promise<{ ok: true } | { ok: false; message: string; canRetry?: boolean }> {
   if (options?.persistJob !== false && referenceToken) {
     saveActiveAlbumJob({
@@ -241,7 +245,7 @@ async function runAsyncJobLoop(
       progressPercent: Math.round((processedSoFar / start.totalImages) * 100),
     })
 
-    const processResult = await processJobBatch(jobId, batch)
+    const processResult = await processJobBatch(jobId, batch, options?.qualityRunId)
 
     if (!processResult.ok) {
       return {
@@ -364,6 +368,7 @@ export async function runAlbumSearchPipeline(
       start,
       onProgress,
       options?.shouldAbort,
+      { qualityRunId: qualityContext?.runId },
     )
 
     if (!loopResult.ok) {
@@ -519,6 +524,7 @@ export async function resumeStoredAlbumJob(
     restart,
     onProgress,
     shouldAbort,
+    { qualityRunId: qualityContext?.runId },
   )
 
   if (!loopResult.ok) return loopResult

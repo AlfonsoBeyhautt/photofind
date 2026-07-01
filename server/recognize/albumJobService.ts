@@ -359,6 +359,7 @@ export type AlbumJobProcessResult = AlbumJobProcessSuccess | AlbumJobStartFailur
 export async function processAlbumJobBatch(input: {
   jobId: string
   images: AlbumImage[]
+  qualityRunId?: string | null
 }): Promise<AlbumJobProcessResult> {
   const startedAt = Date.now()
 
@@ -419,6 +420,7 @@ export async function processAlbumJobBatch(input: {
     collectionId: collection.collection_id,
     images: input.images,
     continueOnError: true,
+    qualityRunId: input.qualityRunId,
   })
 
   if (!batchResult.ok) {

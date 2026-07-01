@@ -1,6 +1,10 @@
 import type { AlbumImage } from '../../src/types/album'
 import { COMPARE_PHASE_MAX_PHOTOS, SIMILARITY_THRESHOLD } from './config'
-import { fetchAlbumImageForRekognition } from './albumImageFetcher'
+import {
+  createImageFetchStats,
+  resolveFetchConcurrency,
+  runParallelImageWork,
+} from './parallelImageFetch'
 import { canUseRekognition, compareFaces } from './rekognitionClient'
 import { getReference } from './referenceStore'
 import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
@@ -114,52 +118,72 @@ export async function compareAlbumToReference(
   let fetchFailures = 0
   let facesCompared = 0
   const searchStarted = Date.now()
+  const fetchStats = createImageFetchStats(resolveFetchConcurrency(toAnalyze))
 
-  for (let i = 0; i < toAnalyze.length; i++) {
-    const image = toAnalyze[i]
-    onProgress?.({ analyzed: i, total: toAnalyze.length, matched: matches.length })
+  type CompareWorkResult =
+    | { kind: 'match'; imageId: string; similarity: number }
+    | { kind: 'no_match' }
+    | { kind: 'aws_failed' }
 
-    let targetBytes: Buffer | null
-    try {
-      targetBytes = await fetchAlbumImageForRekognition(image)
-    } catch {
-      fetchFailures++
-      continue
-    }
-
-    if (!targetBytes) {
-      fetchFailures++
-      continue
-    }
-
-    try {
-      const result = await compareFaces(reference.buffer, targetBytes)
-      facesCompared++
-      if (result) {
-        matches.push({ imageId: image.id, similarity: result.similarity })
+  const workResults = await runParallelImageWork<CompareWorkResult>(
+    toAnalyze,
+    async (image, targetBytes) => {
+      try {
+        const result = await compareFaces(reference.buffer, targetBytes)
+        if (result) {
+          return { kind: 'match', imageId: image.id, similarity: result.similarity }
+        }
+        return { kind: 'no_match' }
+      } catch (error) {
+        console.error('[PhotoFind:Compare] CompareFaces failed:', image.id, error instanceof Error ? error.message : error)
+        return { kind: 'aws_failed' }
       }
-    } catch (error) {
-      console.error('[PhotoFind:Compare] CompareFaces failed:', image.id, error instanceof Error ? error.message : error)
-      void recordCompareFallbackOutcome({
-        runId: qualityTelemetry?.runId,
-        userId: qualityTelemetry?.userId,
-        sessionId: qualityTelemetry?.sessionId,
-        provider: qualityTelemetry?.provider,
-        albumUrl: qualityTelemetry?.albumUrl,
-        imagesAnalyzed: facesCompared,
-        matches,
-        compareFacesCalls: facesCompared,
-        msSearch: Date.now() - searchStarted,
-        referenceSource: qualityTelemetry?.referenceSource,
-        eventCategory: qualityTelemetry?.eventCategory,
-        failed: true,
-        fallbackReason: 'AWS_REKOGNITION_ERROR',
-      })
-      return fail('AWS_REKOGNITION_ERROR')
+    },
+    {
+      stats: fetchStats,
+      onItemComplete: (completed, total) => {
+        onProgress?.({ analyzed: completed, total, matched: matches.length })
+      },
+    },
+  )
+
+  let awsFailed = false
+  for (const result of workResults) {
+    if (!result) {
+      fetchFailures++
+      continue
+    }
+    if (result.kind === 'aws_failed') {
+      awsFailed = true
+      continue
+    }
+    facesCompared++
+    if (result.kind === 'match') {
+      matches.push({ imageId: result.imageId, similarity: result.similarity })
     }
   }
 
   onProgress?.({ analyzed: toAnalyze.length, total: toAnalyze.length, matched: matches.length })
+
+  if (awsFailed) {
+    void recordCompareFallbackOutcome({
+      runId: qualityTelemetry?.runId,
+      userId: qualityTelemetry?.userId,
+      sessionId: qualityTelemetry?.sessionId,
+      provider: qualityTelemetry?.provider,
+      albumUrl: qualityTelemetry?.albumUrl,
+      imagesAnalyzed: facesCompared,
+      matches,
+      compareFacesCalls: facesCompared,
+      msSearch: Date.now() - searchStarted,
+      referenceSource: qualityTelemetry?.referenceSource,
+      eventCategory: qualityTelemetry?.eventCategory,
+      failed: true,
+      fallbackReason: 'AWS_REKOGNITION_ERROR',
+      imageFetchStats: fetchStats,
+    })
+    return fail('AWS_REKOGNITION_ERROR')
+  }
 
   if (facesCompared === 0 && fetchFailures === toAnalyze.length && toAnalyze.length > 0) {
     void recordCompareFallbackOutcome({
@@ -176,6 +200,7 @@ export async function compareAlbumToReference(
       eventCategory: qualityTelemetry?.eventCategory,
       failed: true,
       fallbackReason: 'RECOGNITION_INDEXING_FAILED',
+      imageFetchStats: fetchStats,
     })
     return fail('RECOGNITION_INDEXING_FAILED')
   }
@@ -195,6 +220,7 @@ export async function compareAlbumToReference(
     referenceSource: qualityTelemetry?.referenceSource,
     eventCategory: qualityTelemetry?.eventCategory,
     fallbackReason: qualityTelemetry?.fallbackReason,
+    imageFetchStats: fetchStats,
   })
 
   return {

@@ -315,7 +315,58 @@ export function AdminPage() {
                   </div>
                 )}
 
+                {qualityMetrics.imageFetch.byProvider.length > 0 && (
+                  <div className="glass rounded-2xl p-5 border border-border/50 mt-4 overflow-x-auto">
+                    <p className="text-sm font-medium mb-3">Fetch por proveedor</p>
+                    <table className="w-full text-sm min-w-[480px]">
+                      <thead>
+                        <tr className="text-left text-text-muted border-b border-border/50">
+                          <th className="pb-2 pr-3">Proveedor</th>
+                          <th className="pb-2 pr-3">Runs</th>
+                          <th className="pb-2 pr-3">Prom. fetch</th>
+                          <th className="pb-2 pr-3">Img/s</th>
+                          <th className="pb-2">Fallos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityMetrics.imageFetch.byProvider.map((row) => (
+                          <tr key={row.provider} className="border-b border-border/30 last:border-0">
+                            <td className="py-2 pr-3">{providerAdminLabel(row.provider)}</td>
+                            <td className="py-2 pr-3">{row.runs}</td>
+                            <td className="py-2 pr-3">
+                              {row.avgMsFetch != null ? `${Math.round(row.avgMsFetch / 1000)}s` : '—'}
+                            </td>
+                            <td className="py-2 pr-3">{row.avgImagesPerSecond ?? '—'}</td>
+                            <td className="py-2">{row.totalFailures}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
                 <div className="grid lg:grid-cols-2 gap-4 mt-4">
+                  <div className="glass rounded-2xl p-5 border border-border/50">
+                    <p className="text-sm font-medium mb-3">Fetch de imágenes</p>
+                    <p className="text-sm text-text-muted">
+                      Runs con datos: {qualityMetrics.imageFetch.runsWithData}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Prom. tiempo fetch:{' '}
+                      {qualityMetrics.imageFetch.avgMsFetch != null
+                        ? `${Math.round(qualityMetrics.imageFetch.avgMsFetch / 1000)}s`
+                        : '—'}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Prom. imágenes/seg: {qualityMetrics.imageFetch.avgImagesPerSecond ?? '—'}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Concurrencia prom.: {qualityMetrics.imageFetch.avgConcurrency ?? '—'}
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Requests: {qualityMetrics.imageFetch.totalRequests} · Fallos: {qualityMetrics.imageFetch.totalFailures} · Reintentos: {qualityMetrics.imageFetch.totalRetries}
+                    </p>
+                  </div>
                   <div className="glass rounded-2xl p-5 border border-border/50">
                     <p className="text-sm font-medium mb-3">Agrupación Premium</p>
                     <p className="text-sm text-text-muted">

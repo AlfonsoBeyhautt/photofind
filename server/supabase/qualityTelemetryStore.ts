@@ -31,6 +31,11 @@ export interface QualityRunRow {
   ms_search: number | null
   ms_preload: number | null
   ms_total: number | null
+  ms_image_fetch: number | null
+  image_fetch_concurrency: number | null
+  image_fetch_requests: number
+  image_fetch_failures: number
+  image_fetch_retries: number
   aws_compare_faces_calls: number
   aws_search_faces_by_image_calls: number
   event_category: string | null
@@ -219,6 +224,45 @@ export async function incrementQualityRunDownloads(
 
   if (error) {
     console.error('[PhotoFind:Telemetry] increment_downloads', error.message)
+  }
+}
+
+export interface ImageFetchStatsDelta {
+  msTotal: number
+  requests: number
+  failures: number
+  retries: number
+  concurrency: number
+}
+
+export async function incrementQualityRunImageFetch(
+  runId: string,
+  delta: ImageFetchStatsDelta,
+): Promise<void> {
+  const db = client()
+  if (!db) return
+
+  const { data } = await db
+    .from('recognition_quality_runs')
+    .select('ms_image_fetch, image_fetch_requests, image_fetch_failures, image_fetch_retries')
+    .eq('run_id', runId)
+    .maybeSingle()
+
+  const patch: Record<string, unknown> = {
+    ms_image_fetch: ((data?.ms_image_fetch as number) ?? 0) + delta.msTotal,
+    image_fetch_requests: ((data?.image_fetch_requests as number) ?? 0) + delta.requests,
+    image_fetch_failures: ((data?.image_fetch_failures as number) ?? 0) + delta.failures,
+    image_fetch_retries: ((data?.image_fetch_retries as number) ?? 0) + delta.retries,
+    image_fetch_concurrency: delta.concurrency,
+  }
+
+  const { error } = await db
+    .from('recognition_quality_runs')
+    .update(patch)
+    .eq('run_id', runId)
+
+  if (error) {
+    console.error('[PhotoFind:Telemetry] increment_image_fetch', error.message)
   }
 }
 

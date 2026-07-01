@@ -29,6 +29,7 @@ interface JobStartBody {
 interface JobProcessBody {
   jobId?: string
   images?: AlbumImage[]
+  qualityRunId?: string
 }
 
 interface JobSearchBody {
@@ -105,13 +106,13 @@ export async function handleAlbumJobProcessRequest(
     return
   }
 
-  const { jobId, images } = body
+  const { jobId, images, qualityRunId } = body
   if (!jobId || !Array.isArray(images) || images.length === 0) {
     sendJson(res, 400, { ok: false, error: { code: 'ALBUM_JOB_FAILED', message: 'Faltan datos del job.' } })
     return
   }
 
-  const result = await processAlbumJobBatch({ jobId, images })
+  const result = await processAlbumJobBatch({ jobId, images, qualityRunId })
   sendJson(res, result.ok ? 200 : 400, result)
 }
 

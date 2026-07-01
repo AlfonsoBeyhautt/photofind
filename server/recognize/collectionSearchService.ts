@@ -1,7 +1,12 @@
 import type { AlbumImage } from '../../src/types/album'
 import { computeAlbumFingerprint } from './albumFingerprint'
 import { collectionIdForAlbum } from './collectionStore'
-import { fetchAlbumImageForRekognition } from './albumImageFetcher'
+import {
+  createImageFetchStats,
+  resolveFetchConcurrency,
+  runParallelImageWork,
+} from './parallelImageFetch'
+import { incrementQualityRunImageFetch } from '../supabase/qualityTelemetryStore'
 import {
   ASYNC_JOB_MIN_PHOTOS,
   INDEX_BATCH_SIZE,
@@ -325,6 +330,7 @@ export async function indexAlbumBatch(input: {
   collectionId: string
   images: AlbumImage[]
   continueOnError?: boolean
+  qualityRunId?: string | null
 }): Promise<IndexBatchResult> {
   if (!canUseRekognition()) {
     return fail('AWS_CREDENTIALS_MISSING')
@@ -334,64 +340,92 @@ export async function indexAlbumBatch(input: {
     return fail('RECOGNITION_COLLECTION_METADATA_ERROR')
   }
 
+  const batchImages = input.images.slice(0, INDEX_BATCH_SIZE)
+  const fetchStats = createImageFetchStats(resolveFetchConcurrency(batchImages))
+
+  type WorkResult =
+    | { kind: 'indexed'; faces: number }
+    | { kind: 'no_face' }
+    | { kind: 'fetch_failed' }
+    | { kind: 'aws_failed'; imageId: string }
+
+  const workResults = await runParallelImageWork<WorkResult>(
+    batchImages,
+    async (image, imageBytes) => {
+      try {
+        const faces = await indexFaces(input.collectionId, imageBytes, image.id)
+
+        if (faces.length === 0) {
+          await saveNoFaceMarker(input.albumCollectionId, image.id, image.name)
+          return { kind: 'no_face' }
+        }
+
+        const saved = await saveIndexedFaces(
+          input.albumCollectionId,
+          image.id,
+          image.name,
+          faces.map((face) => ({
+            image_id: image.id,
+            image_name: image.name,
+            face_id: face.faceId,
+            external_image_id: face.externalImageId ?? image.id,
+            bounding_box: face.boundingBox ?? null,
+            confidence: face.confidence ?? null,
+          })),
+        )
+
+        return { kind: 'indexed', faces: saved }
+      } catch (error) {
+        console.error('[PhotoFind:Collections] index_faces_failed', image.id, error instanceof Error ? error.message : error)
+        return { kind: 'aws_failed', imageId: image.id }
+      }
+    },
+    { stats: fetchStats },
+  )
+
   let batchFaces = 0
   let batchIndexedImages = 0
   let batchProcessedImages = 0
   let batchFailedImages = 0
   let batchAwsFailures = 0
 
-  for (const image of input.images.slice(0, INDEX_BATCH_SIZE)) {
-    let imageBytes: Buffer | null
-    try {
-      imageBytes = await fetchAlbumImageForRekognition(image)
-    } catch {
+  for (const result of workResults) {
+    if (!result) {
       batchFailedImages++
       batchProcessedImages++
       continue
     }
 
-    if (!imageBytes) {
-      batchFailedImages++
-      batchProcessedImages++
-      continue
-    }
-
-    try {
-      const faces = await indexFaces(input.collectionId, imageBytes, image.id)
-      batchProcessedImages++
-
-      if (faces.length === 0) {
-        await saveNoFaceMarker(input.albumCollectionId, image.id, image.name)
-        batchIndexedImages++
-        continue
-      }
-
-      const saved = await saveIndexedFaces(
-        input.albumCollectionId,
-        image.id,
-        image.name,
-        faces.map((face) => ({
-          image_id: image.id,
-          image_name: image.name,
-          face_id: face.faceId,
-          external_image_id: face.externalImageId ?? image.id,
-          bounding_box: face.boundingBox ?? null,
-          confidence: face.confidence ?? null,
-        })),
-      )
-
-      batchFaces += saved
-      batchIndexedImages++
-    } catch (error) {
-      console.error('[PhotoFind:Collections] index_faces_failed', image.id, error instanceof Error ? error.message : error)
+    if (result.kind === 'aws_failed') {
       batchProcessedImages++
       batchFailedImages++
       batchAwsFailures++
-
-      if (!input.continueOnError) {
-        return fail('AWS_REKOGNITION_ERROR')
-      }
+      continue
     }
+
+    batchProcessedImages++
+    batchIndexedImages++
+    if (result.kind === 'indexed') {
+      batchFaces += result.faces
+    }
+  }
+
+  if (input.qualityRunId) {
+    void incrementQualityRunImageFetch(input.qualityRunId, fetchStats)
+  }
+
+  console.log('[PhotoFind:Collections] index_batch', {
+    collectionId: input.collectionId,
+    batchIndexedImages,
+    batchProcessedImages,
+    batchFailedImages,
+    batchFaces,
+    imageFetch: fetchStats,
+    continueOnError: input.continueOnError ?? false,
+  })
+
+  if (batchAwsFailures > 0 && !input.continueOnError) {
+    return fail('AWS_REKOGNITION_ERROR')
   }
 
   const indexedImages = await countDistinctIndexedImages(input.albumCollectionId)

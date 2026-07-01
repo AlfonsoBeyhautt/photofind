@@ -3,9 +3,11 @@ import { hashAlbumUrl } from '../supabase/albumCollectionStore'
 import type { ClusteringStatsPayload } from '../supabase/personGroupingStore'
 import {
   incrementQualityRunDownloads,
+  incrementQualityRunImageFetch,
   insertGroupingQuality,
   patchQualityRun,
   upsertQualityRun,
+  type ImageFetchStatsDelta,
 } from '../supabase/qualityTelemetryStore'
 
 function avgSimilarity(similarities: number[]): number | null {
@@ -110,6 +112,7 @@ export async function recordCompareFallbackOutcome(input: {
   referenceSource?: string | null
   eventCategory?: string | null
   failed?: boolean
+  imageFetchStats?: ImageFetchStatsDelta | null
 }): Promise<void> {
   if (!input.runId) return
 
@@ -136,6 +139,10 @@ export async function recordCompareFallbackOutcome(input: {
     outcome: input.failed ? 'failed' : 'completed',
     completedAt: now,
   })
+
+  if (input.imageFetchStats) {
+    await incrementQualityRunImageFetch(input.runId, input.imageFetchStats)
+  }
 }
 
 export async function recordClientProcessingTiming(input: {
