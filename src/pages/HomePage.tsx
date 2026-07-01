@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion'
 import { Navbar } from '../components/layout/Navbar'
 import { GlowOrbs } from '../components/effects/GlowOrbs'
 import { ParticleBackground } from '../components/effects/ParticleBackground'
-import { HeroSection } from '../components/flow/HeroSection'
+import { HeroSection, type AlbumFlowMode } from '../components/flow/HeroSection'
 import { PersonSelection, type PersonContinueData } from '../components/flow/PersonSelection'
 import { ProcessingScreen } from '../components/flow/ProcessingScreen'
 import { ResultsScreen } from '../components/flow/ResultsScreen'
@@ -20,6 +20,7 @@ type FlowStep = 'hero' | 'person' | 'processing' | 'results'
 
 type FlowData = PersonContinueData & {
   albumUrl: string
+  flowMode?: AlbumFlowMode
 }
 
 export function HomePage() {
@@ -51,9 +52,25 @@ export function HomePage() {
     navigate(location.pathname, { replace: true, state: null })
   }, [location.state, location.pathname, navigate, setAlbumUrl])
 
-  const handleAnalyze = useCallback((url: string) => {
+  const handleAnalyze = useCallback((url: string, mode: AlbumFlowMode = 'search') => {
     setAlbumUrl(url)
     setSearchResult(null)
+    setInitialRetry(false)
+
+    if (mode === 'group') {
+      setFlowData({
+        albumUrl: url,
+        method: 'upload',
+        category: 'fiesta',
+        extraInfo: {},
+        referenceToken: '',
+        faceBox: { left: 0, top: 0, width: 0, height: 0 },
+        flowMode: 'group',
+      })
+      setStep('processing')
+      return
+    }
+
     setFlowData({
       albumUrl: url,
       method: 'upload',
@@ -61,6 +78,7 @@ export function HomePage() {
       extraInfo: {},
       referenceToken: '',
       faceBox: { left: 0, top: 0, width: 0, height: 0 },
+      flowMode: 'search',
     })
     setStep('person')
   }, [setAlbumUrl])
@@ -94,6 +112,11 @@ export function HomePage() {
     setSearchResult(null)
   }, [])
 
+  const handleIndexComplete = useCallback(() => {
+    if (!flowData?.albumUrl) return
+    navigate(`/personas?albumUrl=${encodeURIComponent(flowData.albumUrl)}`)
+  }, [flowData?.albumUrl, navigate])
+
   const handleRestart = useCallback(() => {
     resetAllProcessingRuns()
     resetAlbum()
@@ -122,7 +145,18 @@ export function HomePage() {
               onBack={() => { setStep('hero'); setFlowData(null) }}
             />
           )}
-          {step === 'processing' && flowData && flowData.referenceToken && (
+          {step === 'processing' && flowData && flowData.flowMode === 'group' && (
+            <ProcessingScreen
+              key={`indexing-${flowData.albumUrl}-${initialRetry ? 'retry' : 'run'}`}
+              albumUrl={flowData.albumUrl}
+              mode="index-only"
+              userId={user?.id ?? null}
+              initialRetry={initialRetry}
+              onIndexComplete={handleIndexComplete}
+              onError={handleProcessingError}
+            />
+          )}
+          {step === 'processing' && flowData && flowData.flowMode !== 'group' && flowData.referenceToken && (
             <ProcessingScreen
               key={`processing-${flowData.albumUrl}-${flowData.referenceToken}-${initialRetry ? 'retry' : 'run'}`}
               albumUrl={flowData.albumUrl}

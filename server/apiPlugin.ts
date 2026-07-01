@@ -43,6 +43,7 @@ import {
   handlePersonGroupDetailRequest,
   handlePersonGroupingEnsureRequest,
   handlePersonGroupingProcessRequest,
+  handlePersonGroupingStatusRequest,
   handlePersonGroupsListRequest,
 } from './recognize/personGroupingHandler'
 import {
@@ -283,6 +284,18 @@ export function driveApiPlugin(): Plugin {
             sendJson(res, 500, {
               ok: false,
               error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos procesar el siguiente lote del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/person-grouping/status') && req.method === 'GET') {
+          try {
+            await handlePersonGroupingStatusRequest(req, res)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos consultar el estado de agrupación.' },
             })
           }
           return

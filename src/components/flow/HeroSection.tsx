@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Link2, ArrowRight, Cloud, HardDrive, FolderOpen, Send } from 'lucide-react'
+import { Link2, ArrowRight, Cloud, HardDrive, FolderOpen, Send, Crown, ScanFace, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { ErrorBanner } from '../ui/ErrorBanner'
@@ -8,9 +8,13 @@ import { useAlbum } from '../../context/AlbumContext'
 import { getDriveErrorMessage } from '../../lib/drive/errors'
 import { detectProviderFromUrl } from '../../lib/providers/detectProvider'
 import { PROVIDERS, type AlbumProvider } from '../../types/provider'
+import { isPersonGroupingEnabled } from '../../types/personGrouping'
+import { cn } from '../../lib/utils'
+
+export type AlbumFlowMode = 'search' | 'group'
 
 interface HeroSectionProps {
-  onAnalyze: (url: string) => void
+  onAnalyze: (url: string, mode: AlbumFlowMode) => void
 }
 
 const PROVIDER_ICONS: Record<AlbumProvider, LucideIcon> = {
@@ -46,6 +50,8 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
   const [url, setUrl] = useState('')
   const [focused, setFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [flowMode, setFlowMode] = useState<AlbumFlowMode>('search')
+  const premiumEnabled = isPersonGroupingEnabled()
 
   const detectedProvider = useMemo(() => detectProviderFromUrl(url), [url])
   const hasUrl = url.trim().length > 0
@@ -67,7 +73,7 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
       return
     }
     setError(null)
-    onAnalyze(url.trim())
+    onAnalyze(url.trim(), flowMode)
   }
 
   return (
@@ -132,8 +138,17 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
             />
           </div>
           <Button size="lg" onClick={handleSubmit} className="shrink-0 w-full md:w-auto">
-            Analizar álbum
-            <ArrowRight className="w-4 h-4" />
+            {premiumEnabled && flowMode === 'group' ? (
+              <>
+                Agrupar personas
+                <Users className="w-4 h-4" />
+              </>
+            ) : (
+              <>
+                Analizar álbum
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </Button>
         </div>
         {error && <ErrorBanner message={error} className="mt-2 mx-1" />}
@@ -141,6 +156,45 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
           <p className="text-xs text-text-dim mt-2 mx-4">
             No pudimos identificar el origen del enlace.
           </p>
+        )}
+        {premiumEnabled && hasUrl && !error && (
+          <div className="mt-3 mx-1 p-3 rounded-xl bg-violet/5 border border-violet/15">
+            <p className="text-xs text-text-muted mb-2 px-1">¿Qué querés hacer con este álbum?</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFlowMode('search')}
+                className={cn(
+                  'flex items-start gap-3 p-3 rounded-lg border text-left transition-all',
+                  flowMode === 'search'
+                    ? 'border-accent/40 bg-accent/10'
+                    : 'border-border bg-bg-elevated hover:border-border-subtle',
+                )}
+              >
+                <ScanFace className="w-5 h-5 text-accent-bright shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-sm">Buscar mis fotos</p>
+                  <p className="text-xs text-text-muted mt-0.5">Selfie + coincidencias (flujo actual)</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFlowMode('group')}
+                className={cn(
+                  'flex items-start gap-3 p-3 rounded-lg border text-left transition-all',
+                  flowMode === 'group'
+                    ? 'border-violet/40 bg-violet/10'
+                    : 'border-border bg-bg-elevated hover:border-border-subtle',
+                )}
+              >
+                <Crown className="w-5 h-5 text-violet-soft shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-sm">Agrupar todas las personas</p>
+                  <p className="text-xs text-text-muted mt-0.5">Premium — detectar cada persona del álbum</p>
+                </div>
+              </button>
+            </div>
+          </div>
         )}
       </motion.div>
 
@@ -181,8 +235,8 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
       >
         {[
           { step: '01', title: 'Pegá el enlace', desc: 'Carpeta pública de Drive, Dropbox, Pixieset o WeTransfer' },
-          { step: '02', title: 'Elegí tu referencia', desc: 'Subí fotos, sacate una selfie o usá tu perfil' },
-          { step: '03', title: 'Recibí tus fotos', desc: 'Descargá todas las coincidencias en segundos' },
+          { step: '02', title: premiumEnabled ? 'Elegí el modo' : 'Elegí tu referencia', desc: premiumEnabled ? 'Buscá tus fotos o agrupá todas las personas (Premium)' : 'Subí fotos, sacate una selfie o usá tu perfil' },
+          { step: '03', title: 'Recibí tus fotos', desc: premiumEnabled ? 'Coincidencias o grupos por persona listos para descargar' : 'Descargá todas las coincidencias en segundos' },
         ].map((item, i) => (
           <motion.div
             key={item.step}

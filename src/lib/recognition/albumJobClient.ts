@@ -1,7 +1,7 @@
 import type { AlbumData, AlbumImage } from '../../types/album'
 import type { RecognitionSearchResult } from '../../types/recognition'
 import { clearActiveAlbumJob, getActiveAlbumJob, saveActiveAlbumJob } from './albumJobStorage'
-import { compareAlbumToReference, getRecognitionSearchErrorMessage, searchAlbumWithCollection, type SearchProgressUpdate } from './searchClient'
+import { compareAlbumToReference, getRecognitionSearchErrorMessage, indexAlbumWithCollection, searchAlbumWithCollection, type SearchProgressUpdate } from './searchClient'
 import { getOrCreateSessionId } from './sessionId'
 
 /** Must match server ASYNC_JOB_MIN_PHOTOS */
@@ -176,12 +176,14 @@ async function runAsyncJobLoop(
   jobId: string,
   album: AlbumData,
   albumUrl: string,
-  referenceToken: string,
+  referenceToken: string | null,
   start: JobStartSuccess,
   onProgress?: (update: AlbumJobProgressUpdate) => void,
   shouldAbort?: () => boolean,
+  options?: { persistJob?: boolean },
 ): Promise<{ ok: true } | { ok: false; message: string; canRetry?: boolean }> {
-  saveActiveAlbumJob({
+  if (options?.persistJob !== false && referenceToken) {
+    saveActiveAlbumJob({
     jobId,
     albumUrl,
     albumName: album.folderName,
@@ -192,8 +194,9 @@ async function runAsyncJobLoop(
     collectionId: start.collectionId,
     totalImages: start.totalImages,
     collectionReused: start.collectionReused,
-    updatedAt: new Date().toISOString(),
-  })
+      updatedAt: new Date().toISOString(),
+    })
+  }
 
   onProgress?.({
     phase: 'indexing',
@@ -505,6 +508,87 @@ export async function resumeStoredAlbumJob(
   if (!loopResult.ok) return loopResult
 
   return runAlbumSearchPipeline(referenceToken, album, albumUrl, { onProgress, shouldAbort })
+}
+
+/** Index album Collection without SearchFacesByImage — for Premium person grouping. */
+export async function runAlbumIndexOnlyPipeline(
+  album: AlbumData,
+  albumUrl: string,
+  options?: {
+    userId?: string | null
+    onProgress?: (update: AlbumJobProgressUpdate) => void
+    shouldAbort?: () => boolean
+    retry?: boolean
+  },
+): Promise<{ ok: true } | { ok: false; message: string; canRetry?: boolean }> {
+  const onProgress = options?.onProgress
+
+  onProgress?.({
+    phase: 'checking',
+    message: 'Revisando si este álbum ya fue analizado',
+    total: album.totalImages,
+  })
+
+  let start: JobStartSuccess | JobStartFailure
+  try {
+    start = await startAlbumJob(album, albumUrl, options?.userId, options?.retry)
+  } catch {
+    if (album.totalImages >= ASYNC_JOB_MIN_PHOTOS) {
+      return { ok: false, message: 'No pudimos iniciar el análisis del álbum.', canRetry: true }
+    }
+    return indexAlbumWithCollection(album, albumUrl, onProgress)
+  }
+
+  if (!start.ok) {
+    if (album.totalImages < ASYNC_JOB_MIN_PHOTOS) {
+      return indexAlbumWithCollection(album, albumUrl, onProgress)
+    }
+    return {
+      ok: false,
+      message: getRecognitionSearchErrorMessage(start.error.code, start.error.message),
+      canRetry: true,
+    }
+  }
+
+  if (start.mode === 'collection_ready') {
+    onProgress?.({
+      phase: 'checking',
+      message: 'Usando análisis previo del álbum',
+      collectionReused: true,
+      current: start.indexedImages,
+      total: start.totalImages,
+    })
+    return { ok: true }
+  }
+
+  if (start.mode === 'sync') {
+    return indexAlbumWithCollection(album, albumUrl, onProgress)
+  }
+
+  if (start.mode === 'async' && start.jobId) {
+    onProgress?.({
+      phase: 'indexing',
+      message: 'Analizando álbum en segundo plano',
+      current: start.indexedImages,
+      total: start.totalImages,
+      asyncMode: true,
+      jobId: start.jobId,
+      canLeaveScreen: true,
+    })
+
+    return runAsyncJobLoop(
+      start.jobId,
+      album,
+      albumUrl,
+      null,
+      start,
+      onProgress,
+      options?.shouldAbort,
+      { persistJob: false },
+    )
+  }
+
+  return { ok: true }
 }
 
 export { clearActiveAlbumJob, getActiveAlbumJob }

@@ -1,4 +1,4 @@
-import type { PersonGroupPublic, PersonGroupingStatusPayload } from '../../types/personGrouping'
+import type { PersonGroupPublic, PersonGroupingReadStatus, PersonGroupingStatusPayload } from '../../types/personGrouping'
 import { apiGetJson, apiPostJson, isApiTransportError } from '../api/apiFetch'
 import { supabase } from '../supabase/client'
 
@@ -87,6 +87,23 @@ export async function processPersonGroupingBatch(albumUrl: string): Promise<
 
   if (!result.ok) {
     return { ok: false, message: result.error.message, code: result.error.code }
+  }
+  return result
+}
+
+export async function fetchPersonGroupingStatus(albumUrl: string): Promise<
+  | { ok: true; status: PersonGroupingReadStatus }
+  | { ok: false; message: string }
+> {
+  const result = await authGetJson<{
+    ok: true
+    status: PersonGroupingReadStatus
+  } | { ok: false; error: { code: string; message: string } }>(
+    `/api/recognize/person-grouping/status?albumUrl=${encodeURIComponent(albumUrl)}`,
+  )
+
+  if (!result.ok) {
+    return { ok: false, message: result.error.message }
   }
   return result
 }

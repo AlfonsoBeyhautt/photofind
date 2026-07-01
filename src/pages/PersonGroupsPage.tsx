@@ -13,7 +13,7 @@ import { Progress } from '../components/ui/Progress'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { PhotoGallery } from '../components/gallery/PhotoGallery'
 import { PhotoLightbox } from '../components/gallery/PhotoLightbox'
-import { DriveImage } from '../components/gallery/DriveImage'
+import { PersonFaceAvatar, representativeCropToFaceBox } from '../components/recognition/PersonFaceAvatar'
 import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { getDownloadUrl } from '../lib/images/imageUrls'
@@ -335,6 +335,7 @@ function PersonGroupCard({
   onOpen: () => void
 }) {
   const repImage = albumImages.find((img) => img.id === group.representativeImageId)
+  const faceBox = representativeCropToFaceBox(group.representativeCrop)
 
   return (
     <motion.button
@@ -348,15 +349,7 @@ function PersonGroupCard({
         'hover:bg-violet/5 transition-all flex items-center gap-4',
       )}
     >
-      <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-violet/30 shrink-0 bg-bg-elevated">
-        {repImage ? (
-          <DriveImage image={repImage} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-text-dim">
-            <Users className="w-6 h-6" />
-          </div>
-        )}
-      </div>
+      <PersonFaceAvatar image={repImage} faceBox={faceBox} size={64} />
       <div className="flex-1 min-w-0">
         <p className="font-semibold">{group.personLabel}</p>
         <p className="text-sm text-text-muted">{group.photoCount.toLocaleString()} fotos</p>

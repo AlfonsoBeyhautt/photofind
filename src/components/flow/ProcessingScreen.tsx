@@ -9,7 +9,7 @@ import { useAlbum } from '../../context/AlbumContext'
 import { getDriveErrorMessage } from '../../lib/drive/errors'
 import { preloadAllThumbnails } from '../../lib/images/loadQueue'
 import { getGalleryThumbnailUrl } from '../../lib/images/imageUrls'
-import { runAlbumSearchPipeline, resumeStoredAlbumJob, ASYNC_JOB_MIN_PHOTOS } from '../../lib/recognition/albumJobClient'
+import { runAlbumSearchPipeline, runAlbumIndexOnlyPipeline, resumeStoredAlbumJob, ASYNC_JOB_MIN_PHOTOS } from '../../lib/recognition/albumJobClient'
 import { ProviderComingSoon } from './ProviderComingSoon'
 import { detectProviderFromUrl } from '../../lib/providers/detectProvider'
 import {
@@ -26,11 +26,13 @@ import type { RecognitionSearchResult } from '../../types/recognition'
 
 interface ProcessingScreenProps {
   albumUrl: string
-  referenceToken: string
+  referenceToken?: string
+  mode?: 'search' | 'index-only'
   qualityWarning?: string
   userId?: string | null
   initialRetry?: boolean
-  onComplete: (result: RecognitionSearchResult) => void
+  onComplete?: (result: RecognitionSearchResult) => void
+  onIndexComplete?: () => void
   onError: () => void
 }
 
@@ -38,10 +40,12 @@ const ACTIVE_PROVIDERS = new Set<AlbumProvider>(['google-drive', 'dropbox', 'pix
 
 export function ProcessingScreen({
   albumUrl,
-  referenceToken,
+  referenceToken = '',
+  mode = 'search',
   userId,
   initialRetry = false,
   onComplete,
+  onIndexComplete,
   onError,
 }: ProcessingScreenProps) {
   const provider = detectProviderFromUrl(albumUrl)
@@ -56,9 +60,11 @@ export function ProcessingScreen({
       albumUrl={albumUrl}
       provider={provider as 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'}
       referenceToken={referenceToken}
+      mode={mode}
       userId={userId}
       initialRetry={initialRetry}
       onComplete={onComplete}
+      onIndexComplete={onIndexComplete}
       onError={onError}
       fetchAlbum={fetchAlbum}
       error={error}
@@ -71,9 +77,11 @@ interface AlbumProcessingScreenProps {
   albumUrl: string
   provider: 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'
   referenceToken: string
+  mode: 'search' | 'index-only'
   userId?: string | null
   initialRetry?: boolean
-  onComplete: (result: RecognitionSearchResult) => void
+  onComplete?: (result: RecognitionSearchResult) => void
+  onIndexComplete?: () => void
   onError: () => void
   fetchAlbum: (url: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
   error: DriveError | null
@@ -93,16 +101,22 @@ function AlbumProcessingScreen({
   albumUrl,
   provider,
   referenceToken,
+  mode,
   userId,
   initialRetry = false,
   onComplete,
+  onIndexComplete,
   onError,
   fetchAlbum,
   error,
   setThumbnailsReady,
 }: AlbumProcessingScreenProps) {
   const providerMeta = getProviderMeta(provider)
-  const processingKey = buildProcessingKey(provider, albumUrl, referenceToken)
+  const processingKey = buildProcessingKey(
+    provider,
+    albumUrl,
+    mode === 'index-only' ? 'index-only' : referenceToken,
+  )
 
   const [progress, setProgress] = useState(0)
   const [imageCount, setImageCount] = useState(0)
@@ -128,12 +142,14 @@ function AlbumProcessingScreen({
   const abortRef = useRef<AbortController | null>(null)
   const fetchAlbumRef = useRef(fetchAlbum)
   const onCompleteRef = useRef(onComplete)
+  const onIndexCompleteRef = useRef(onIndexComplete)
   const setThumbnailsReadyRef = useRef(setThumbnailsReady)
   const errorRef = useRef(error)
   const userIdRef = useRef(userId)
 
   fetchAlbumRef.current = fetchAlbum
   onCompleteRef.current = onComplete
+  onIndexCompleteRef.current = onIndexComplete
   setThumbnailsReadyRef.current = setThumbnailsReady
   errorRef.current = error
   userIdRef.current = userId
@@ -243,9 +259,58 @@ function AlbumProcessingScreen({
         setThumbnailsReadyRef.current(true)
         setProgress(62)
         setPhase('recognizing')
-        setStatusLine('Revisando si este álbum ya fue analizado...')
+        setStatusLine(
+          mode === 'index-only'
+            ? 'Preparando álbum para agrupar personas…'
+            : 'Revisando si este álbum ya fue analizado...',
+        )
         await new Promise((r) => setTimeout(r, 300))
         if (cancelled || abort.signal.aborted) return
+
+        if (mode === 'index-only') {
+          const indexResult = await runAlbumIndexOnlyPipeline(album, albumUrl, {
+            userId: userIdRef.current,
+            retry: retryCount > 0,
+            shouldAbort: () => cancelled || abort.signal.aborted,
+            onProgress: ({ phase: searchPhase, message, current, total, collectionReused: reused, asyncMode: isAsync, canLeaveScreen: leaveOk, progressPercent }) => {
+              if (cancelled || abort.signal.aborted) return
+              setRecognizePhase(searchPhase === 'searching' ? 'indexing' : searchPhase)
+              setStatusLine(message)
+              if (typeof current === 'number') setRecognizeDone(current)
+              if (typeof total === 'number') setRecognizeTotal(total)
+              if (reused) setCollectionReused(true)
+              if (isAsync) setAsyncMode(true)
+              if (leaveOk) setCanLeaveScreen(true)
+
+              let pct = 62
+              if (searchPhase === 'checking') {
+                pct = 62 + 8
+              } else if (searchPhase === 'indexing' && total && total > 0 && typeof current === 'number') {
+                pct = 70 + (current / total) * 22
+              } else if (typeof progressPercent === 'number') {
+                pct = 62 + (progressPercent / 100) * 32
+              }
+              setProgress(pct)
+            },
+          })
+
+          if (cancelled || abort.signal.aborted) return
+
+          if (!indexResult.ok) {
+            setLocalError(indexResult.message)
+            setCanRetry(indexResult.canRetry ?? false)
+            setPhase('error')
+            markProcessingFailed(processingKey)
+            return
+          }
+
+          setProgress(100)
+          setPhase('ready')
+          setStatusLine('Álbum listo. Abriendo personas…')
+          markProcessingComplete(processingKey)
+          setTimeout(() => onIndexCompleteRef.current?.(), 400)
+          return
+        }
 
         const resumed = await resumeStoredAlbumJob(
           albumUrl,
@@ -327,7 +392,7 @@ function AlbumProcessingScreen({
         setPhase('ready')
         setStatusLine('Preparando resultados...')
         markProcessingComplete(processingKey)
-        setTimeout(() => onCompleteRef.current(searchResult.result), 400)
+        setTimeout(() => onCompleteRef.current?.(searchResult.result), 400)
       } catch (err) {
         if (cancelled || abort.signal.aborted) return
         const message = err instanceof Error ? err.message : String(err)

@@ -1,14 +1,20 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Crown, ChevronRight, X } from 'lucide-react'
-import { DETECTED_PEOPLE, generatePhotoUrls } from '../../data/mock'
+import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { Crown, Users, ScanFace, Sparkles, ArrowRight } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
-import { cn } from '../../lib/utils'
+import { useAuth } from '../../context/AuthContext'
+import { isPersonGroupingEnabled } from '../../types/personGrouping'
 
 export function PremiumSection() {
-  const [selectedPerson, setSelectedPerson] = useState<string | null>(null)
-  const person = DETECTED_PEOPLE.find((p) => p.id === selectedPerson)
+  const { isLoggedIn } = useAuth()
+  const premiumEnabled = isPersonGroupingEnabled()
+
+  if (!premiumEnabled) return null
+
+  const dashboardTarget = isLoggedIn
+    ? '/dashboard#premium-personas'
+    : '/login?redirect=' + encodeURIComponent('/dashboard#premium-personas')
 
   return (
     <section id="premium" className="py-24 px-6">
@@ -22,124 +28,60 @@ export function PremiumSection() {
             Agrupar todas las personas
           </h2>
           <p className="text-text-muted max-w-xl mx-auto">
-            Descubrí quién más aparece en el álbum. La IA detecta y agrupa automáticamente a cada persona.
+            Descubrí quién más aparece en el álbum. La IA detecta y agrupa automáticamente a cada persona — sin selfie ni búsqueda individual.
           </p>
         </div>
 
-        <div className="glass rounded-2xl p-6 md:p-8 glow-blue">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {DETECTED_PEOPLE.map((p, i) => (
-              <motion.button
-                key={p.id}
-                initial={{ opacity: 0, y: 20 }}
+        <div className="glass rounded-2xl p-6 md:p-8 glow-blue border border-violet/10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            {[
+              {
+                icon: ScanFace,
+                title: 'Indexá el álbum',
+                desc: 'Analizamos todas las caras del álbum una sola vez.',
+              },
+              {
+                icon: Sparkles,
+                title: 'Agrupación inteligente',
+                desc: 'Clustering automático con reconocimiento facial avanzado.',
+              },
+              {
+                icon: Users,
+                title: 'Navegá por persona',
+                desc: 'Persona 1, Persona 2… con todas sus fotos listas para descargar.',
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.08 }}
-                whileHover={{ y: -4, scale: 1.02 }}
-                onClick={() => setSelectedPerson(p.id)}
-                className={cn(
-                  'flex items-center gap-4 p-4 rounded-xl border text-left transition-all',
-                  'border-border bg-bg-elevated hover:border-violet/40 hover:bg-violet/5'
-                )}
+                className="rounded-xl border border-border bg-bg-elevated p-5"
               >
-                <img
-                  src={`https://i.pravatar.cc/80?img=${p.avatarSeed}`}
-                  alt={p.name}
-                  className="w-14 h-14 rounded-full ring-2 ring-violet/30"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{p.name}</p>
-                  <p className="text-sm text-text-muted">{p.photoCount} fotos</p>
-                  <p className="text-xs text-violet-soft mt-0.5">{p.confidence}% confianza</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-text-dim shrink-0" />
-              </motion.button>
-            ))}
-          </div>
-
-          <div className="mt-6 pt-6 border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-text-muted">
-              Desbloqueá el agrupamiento completo con PhotoFind Premium
-            </p>
-            <Button variant="primary" size="sm">
-              <Crown className="w-4 h-4" />
-              Probar Premium
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {person && (
-          <PersonGalleryModal person={person} onClose={() => setSelectedPerson(null)} />
-        )}
-      </AnimatePresence>
-    </section>
-  )
-}
-
-function PersonGalleryModal({
-  person,
-  onClose,
-}: {
-  person: (typeof DETECTED_PEOPLE)[0]
-  onClose: () => void
-}) {
-  const photos = generatePhotoUrls(Math.min(person.photoCount, 12), person.avatarSeed * 10)
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-6 bg-black/70 backdrop-blur-sm safe-top safe-bottom safe-x"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 24 }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden glass rounded-none sm:rounded-2xl flex flex-col"
-      >
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border-subtle shrink-0">
-          <div className="flex items-center gap-4">
-            <img
-              src={`https://i.pravatar.cc/80?img=${person.avatarSeed}`}
-              alt={person.name}
-              className="w-12 h-12 rounded-full ring-2 ring-violet/30"
-            />
-            <div>
-              <h3 className="font-display font-bold text-xl">{person.name}</h3>
-              <p className="text-sm text-text-muted">{person.photoCount} fotos encontradas</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2.5 rounded-xl hover:bg-white/5 transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {photos.map((url, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.03 }}
-                className="aspect-square rounded-lg overflow-hidden"
-              >
-                <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                <item.icon className="w-8 h-8 text-violet-soft mb-3" />
+                <p className="font-semibold mb-1">{item.title}</p>
+                <p className="text-sm text-text-muted">{item.desc}</p>
               </motion.div>
             ))}
           </div>
+
+          <div className="pt-6 border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-text-muted text-center sm:text-left">
+              {isLoggedIn
+                ? 'Accedé a tus álbumes procesados y generá la agrupación desde el Dashboard.'
+                : 'Iniciá sesión para probar la agrupación premium con tus álbumes.'}
+            </p>
+            <Link to={dashboardTarget}>
+              <Button variant="primary" size="sm">
+                <Crown className="w-4 h-4" />
+                Probar Premium
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </section>
   )
 }

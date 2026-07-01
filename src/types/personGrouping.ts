@@ -31,3 +31,12 @@ export function isPersonGroupingEnabled(): boolean {
   return import.meta.env.VITE_ENABLE_PERSON_GROUPING === 'true'
     || import.meta.env.VITE_ENABLE_PERSON_GROUPING === '1'
 }
+
+export type PersonGroupingReadStatus = {
+  collectionReady: boolean
+  hasAccess: boolean
+  groupingStatus: PersonGroupingJobStatus | 'none'
+  progressPercent: number
+  visibleGroups: number
+  message: string
+}

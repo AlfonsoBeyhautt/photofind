@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Search, FolderOpen, Clock, Plus, User, Mail, Calendar, Loader2, AlertCircle, Users,
+  Search, FolderOpen, Clock, Plus, User, Mail, Calendar, Loader2, AlertCircle,
 } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { GlowOrbs } from '../components/effects/GlowOrbs'
@@ -11,6 +11,7 @@ import { Badge } from '../components/ui/Badge'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { FacialProfileSection } from '../components/account/FacialProfileSection'
 import { ActiveAlbumJobsSection } from '../components/dashboard/ActiveAlbumJobsSection'
+import { PremiumPersonGroupingSection } from '../components/dashboard/PremiumPersonGroupingSection'
 import { useAuth } from '../context/AuthContext'
 import {
   fetchDashboard,
@@ -65,6 +66,15 @@ export function DashboardPage() {
     void load()
     return () => { cancelled = true }
   }, [facialProfile])
+
+  useEffect(() => {
+    if (loading) return
+    if (window.location.hash !== '#premium-personas') return
+    const el = document.getElementById('premium-personas')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [loading, processedAlbums.length])
 
   useEffect(() => {
     if (activeAlbumJobs.length === 0) return
@@ -183,6 +193,10 @@ export function DashboardPage() {
           }}
         />
 
+        {isPersonGroupingEnabled() && !loading && (
+          <PremiumPersonGroupingSection albums={processedAlbums} />
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -286,16 +300,8 @@ export function DashboardPage() {
                           )}
                         </div>
                       </div>
-                      <div className="text-right shrink-0 text-xs text-text-muted flex flex-col items-end gap-2">
+                      <div className="text-right shrink-0 text-xs text-text-muted">
                         <span>{formatSearchDate(album.lastSearchedAt)}</span>
-                        {isPersonGroupingEnabled() && (
-                          <Link to={`/personas?albumUrl=${encodeURIComponent(album.albumUrl)}`}>
-                            <Button variant="outline" size="sm">
-                              <Users className="w-3.5 h-3.5" />
-                              Ver personas
-                            </Button>
-                          </Link>
-                        )}
                       </div>
                     </div>
                   ))}

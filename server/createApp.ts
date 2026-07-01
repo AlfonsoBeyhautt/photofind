@@ -45,6 +45,7 @@ import {
   handlePersonGroupDetailRequest,
   handlePersonGroupingEnsureRequest,
   handlePersonGroupingProcessRequest,
+  handlePersonGroupingStatusRequest,
   handlePersonGroupsListRequest,
 } from './recognize/personGroupingHandler'
 import {
@@ -289,6 +290,18 @@ export function createApp(options: CreateAppOptions = {}): Express {
       res.status(500).json({
         ok: false,
         error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos procesar la agrupación por personas.' },
+      })
+    }
+  })
+
+  app.get('/api/recognize/person-grouping/status', async (req, res) => {
+    try {
+      await handlePersonGroupingStatusRequest(req, res)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] person_grouping_status_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos consultar el estado de agrupación.' },
       })
     }
   })

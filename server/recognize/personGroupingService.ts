@@ -555,6 +555,104 @@ export async function processPersonGroupingBatch(input: {
   }
 }
 
+export interface PersonGroupingReadStatusPayload {
+  collectionReady: boolean
+  hasAccess: boolean
+  groupingStatus: PersonGroupingRow['status'] | 'none'
+  progressPercent: number
+  visibleGroups: number
+  message: string
+}
+
+/** Read-only status for dashboard — does not create or start grouping jobs. */
+export async function getPersonGroupingStatusReadOnly(input: {
+  albumUrl?: string
+  albumCollectionId?: string
+  userId: string | null
+}): Promise<
+  | { ok: true; status: PersonGroupingReadStatusPayload }
+  | { ok: false; error: { code: PersonGroupingErrorCode; message: string } }
+> {
+  if (!isPersonGroupingFeatureEnabled()) {
+    return fail('PERSON_GROUPING_DISABLED')
+  }
+
+  const collection = await resolveAlbumCollection(input.albumUrl, input.albumCollectionId)
+  if (!collection) {
+    return {
+      ok: true,
+      status: {
+        collectionReady: false,
+        hasAccess: false,
+        groupingStatus: 'none',
+        progressPercent: 0,
+        visibleGroups: 0,
+        message: 'El álbum todavía no fue indexado.',
+      },
+    }
+  }
+
+  const collectionReady = collection.status === 'ready'
+  const access = await canAccessPersonGrouping(collection.id, input.userId)
+
+  if (!collectionReady) {
+    return {
+      ok: true,
+      status: {
+        collectionReady: false,
+        hasAccess: access.ok,
+        groupingStatus: 'none',
+        progressPercent: 0,
+        visibleGroups: 0,
+        message: 'El álbum se está indexando.',
+      },
+    }
+  }
+
+  if (!access.ok) {
+    return {
+      ok: true,
+      status: {
+        collectionReady: true,
+        hasAccess: false,
+        groupingStatus: 'none',
+        progressPercent: 0,
+        visibleGroups: 0,
+        message: 'Necesitás acceso Premium para agrupar personas.',
+      },
+    }
+  }
+
+  const grouping = await findPersonGroupingByVersion(collection.id, PERSON_GROUPING_ALGORITHM_VERSION)
+
+  if (!grouping || grouping.status === 'stale') {
+    return {
+      ok: true,
+      status: {
+        collectionReady: true,
+        hasAccess: true,
+        groupingStatus: 'none',
+        progressPercent: 0,
+        visibleGroups: 0,
+        message: 'Todavía no generaste la agrupación por personas.',
+      },
+    }
+  }
+
+  const state = grouping.cluster_state as ClusterState | null
+  return {
+    ok: true,
+    status: {
+      collectionReady: true,
+      hasAccess: true,
+      groupingStatus: grouping.status,
+      progressPercent: progressPercent(grouping, state),
+      visibleGroups: grouping.visible_groups,
+      message: statusMessage(grouping),
+    },
+  }
+}
+
 export async function listPersonGroupsForAlbum(input: {
   albumUrl?: string
   albumCollectionId?: string

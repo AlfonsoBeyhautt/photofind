@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import { AuthLayout } from '../components/layout/AuthLayout'
@@ -11,6 +11,8 @@ import { useAuth } from '../context/AuthContext'
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || '/dashboard'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -26,7 +28,7 @@ export function LoginPage() {
       setError(result.error ?? 'No pudimos iniciar sesión.')
       return
     }
-    navigate('/dashboard')
+    navigate(redirectTo.startsWith('/') ? redirectTo : '/dashboard')
   }
 
   return (

@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '../auth/supabaseAuth'
 import {
   ensurePersonGrouping,
   getPersonGroupDetail,
+  getPersonGroupingStatusReadOnly,
   listPersonGroupsForAlbum,
   processPersonGroupingBatch,
 } from './personGroupingService'
@@ -74,6 +75,19 @@ export async function handlePersonGroupingProcessRequest(
     userId,
   })
 
+  sendJson(res, result.ok ? 200 : 400, result)
+}
+
+export async function handlePersonGroupingStatusRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const url = new URL(req.url ?? '', 'http://localhost')
+  const albumUrl = url.searchParams.get('albumUrl') ?? undefined
+  const albumCollectionId = url.searchParams.get('albumCollectionId') ?? undefined
+
+  const userId = await resolveUserId(req)
+  const result = await getPersonGroupingStatusReadOnly({ albumUrl, albumCollectionId, userId })
   sendJson(res, result.ok ? 200 : 400, result)
 }
 

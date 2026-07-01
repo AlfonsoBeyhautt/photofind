@@ -367,3 +367,119 @@ export async function searchAlbumWithCollection(
     result: toSearchResult(search, largeAlbumWarning),
   }
 }
+
+/**
+ * Index album faces into a Collection without running SearchFacesByImage.
+ * Used by the Premium person-grouping flow.
+ */
+export async function indexAlbumWithCollection(
+  album: AlbumData,
+  albumUrl: string,
+  onProgress?: (update: SearchProgressUpdate) => void,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  onProgress?.({
+    phase: 'checking',
+    message: 'Revisando colecci?n?',
+    total: album.totalImages,
+  })
+
+  let prepare: PrepareCollectionApiSuccess | PrepareCollectionApiFailure
+  try {
+    const res = await fetch('/api/recognize/collection-prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: album.source,
+        folderId: album.folderId,
+        folderName: album.folderName,
+        albumUrl,
+        images: album.images.map((img) => ({ id: img.id, name: img.name })),
+      }),
+    })
+    prepare = (await res.json()) as PrepareCollectionApiSuccess | PrepareCollectionApiFailure
+  } catch {
+    return { ok: false, message: 'No pudimos preparar el ?lbum para indexaci?n.' }
+  }
+
+  if (!prepare.ok) {
+    return {
+      ok: false,
+      message: getRecognitionSearchErrorMessage(prepare.error.code, prepare.error.message),
+    }
+  }
+
+  if (prepare.reused) {
+    onProgress?.({
+      phase: 'checking',
+      message: 'Usando an?lisis previo del ?lbum',
+      current: prepare.indexedImages,
+      total: prepare.totalImages,
+      collectionReused: true,
+    })
+  } else if (prepare.pendingImageIds.length > 0) {
+    onProgress?.({
+      phase: 'indexing',
+      message: 'Analizando ?lbum por primera vez',
+      current: prepare.indexedImages,
+      total: prepare.totalImages,
+    })
+  }
+
+  const pendingSet = new Set(prepare.pendingImageIds)
+  const imagesToIndex = album.images.filter((img) => pendingSet.has(img.id))
+
+  let indexedImages = prepare.indexedImages
+
+  for (let i = 0; i < imagesToIndex.length; i += INDEX_BATCH_SIZE) {
+    const batch = imagesToIndex.slice(i, i + INDEX_BATCH_SIZE)
+
+    onProgress?.({
+      phase: 'indexing',
+      message: `Indexando caras ${indexedImages}/${prepare.totalImages}`,
+      current: indexedImages,
+      total: prepare.totalImages,
+    })
+
+    let indexResult: IndexBatchApiSuccess | IndexBatchApiFailure
+    try {
+      const res = await fetch('/api/recognize/collection-index', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          albumCollectionId: prepare.albumCollectionId,
+          collectionId: prepare.collectionId,
+          images: batch,
+        }),
+      })
+      indexResult = (await res.json()) as IndexBatchApiSuccess | IndexBatchApiFailure
+    } catch {
+      return { ok: false, message: 'No pudimos indexar las fotos del ?lbum.' }
+    }
+
+    if (!indexResult.ok) {
+      return {
+        ok: false,
+        message: getRecognitionSearchErrorMessage(indexResult.error.code, indexResult.error.message),
+      }
+    }
+
+    indexedImages = indexResult.indexedImages
+
+    onProgress?.({
+      phase: 'indexing',
+      message: `Indexando caras ${indexedImages}/${prepare.totalImages}`,
+      current: indexedImages,
+      total: prepare.totalImages,
+    })
+  }
+
+  onProgress?.({
+    phase: 'checking',
+    message: '?lbum listo para agrupar personas',
+    current: indexedImages,
+    total: prepare.totalImages,
+    collectionReused: prepare.reused,
+  })
+
+  return { ok: true }
+}
