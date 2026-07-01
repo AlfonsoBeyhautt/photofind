@@ -7,11 +7,11 @@ import {
 import {
   PERSON_GROUPING_ALGORITHM_VERSION,
   PERSON_GROUPING_MAX_FACE_MATCHES,
+  PERSON_GROUPING_LOW_CONFIDENCE_QUALITY_SCORE,
   PERSON_GROUPING_MERGE_HIGH_CONFIDENCE,
   PERSON_GROUPING_MERGE_MAX_SEARCHES,
   PERSON_GROUPING_MERGE_REPRESENTATIVES,
   PERSON_GROUPING_MERGE_SIMILARITY_THRESHOLD,
-  PERSON_GROUPING_MIN_GROUP_QUALITY_SCORE,
   PERSON_GROUPING_MIN_PHOTOS,
   PERSON_GROUPING_MIN_SEED_BBOX_AREA,
   PERSON_GROUPING_MIN_SEED_CONFIDENCE,
@@ -36,7 +36,8 @@ import {
   listIndexedFacesForGrouping,
   listPersonGroupFaceMembers,
   listPersonGroupImageIds,
-  listVisiblePersonGroups,
+  listDisplayPersonGroups,
+  listUngroupedFacesForGrouping,
   type ClusterState,
   type ClusterStateFace,
   type ClusteringStatsPayload,
@@ -349,6 +350,14 @@ export interface PersonGroupPublic {
   representativeImageId: string
   representativeCrop: BoundingBox | null
   avatarCandidates?: PersonGroupAvatarCandidate[]
+  lowConfidence?: boolean
+}
+
+export interface UngroupedFacePublic {
+  faceId: string
+  imageId: string
+  representativeCrop: BoundingBox | null
+  reason: 'singleton' | 'low_quality' | 'insufficient_photos'
 }
 
 export interface PersonGroupingStatusPayload {
@@ -362,6 +371,7 @@ export interface PersonGroupingStatusPayload {
   visibleGroups: number
   message: string
   groups?: PersonGroupPublic[]
+  ungroupedFaces?: UngroupedFacePublic[]
 }
 
 function statusMessage(row: PersonGroupingRow): string {
@@ -400,6 +410,7 @@ function progressPercent(row: PersonGroupingRow, state: ClusterState | null): nu
 function toPublicGroups(
   groups: PersonGroupRow[],
   avatarCandidatesByGroup?: Map<string, PersonGroupAvatarCandidate[]>,
+  lowConfidenceByGroup?: Set<string>,
 ): PersonGroupPublic[] {
   return groups.map((g) => ({
     groupId: g.id,
@@ -409,6 +420,7 @@ function toPublicGroups(
     representativeImageId: g.representative_image_id,
     representativeCrop: g.representative_crop,
     avatarCandidates: avatarCandidatesByGroup?.get(g.id),
+    lowConfidence: lowConfidenceByGroup?.has(g.id) ?? false,
   }))
 }
 
@@ -467,18 +479,70 @@ async function toPublicGroupsWithAvatars(
   albumCollectionId: string,
 ): Promise<PersonGroupPublic[]> {
   const candidates = await buildAvatarCandidatesByGroup(groupingId, albumCollectionId, groups)
-  return toPublicGroups(groups, candidates)
+  const lowConfidence = new Set(
+    groups
+      .filter((g) => (g.quality_score ?? 0) < PERSON_GROUPING_LOW_CONFIDENCE_QUALITY_SCORE)
+      .map((g) => g.id),
+  )
+  return toPublicGroups(groups, candidates, lowConfidence)
+}
+
+function classifyUngroupedReason(
+  photoCount: number,
+  minPhotos: number,
+  qualityScore: number | null,
+): UngroupedFacePublic['reason'] {
+  if (photoCount < minPhotos) {
+    return photoCount <= 1 ? 'singleton' : 'insufficient_photos'
+  }
+  if ((qualityScore ?? 0) < PERSON_GROUPING_LOW_CONFIDENCE_QUALITY_SCORE) {
+    return 'low_quality'
+  }
+  return 'singleton'
+}
+
+async function buildUngroupedFacesPublic(
+  groupingId: string,
+  albumCollectionId: string,
+  minPhotos: number,
+): Promise<UngroupedFacePublic[]> {
+  const rows = await listUngroupedFacesForGrouping(groupingId, minPhotos)
+  if (rows.length === 0) return []
+
+  const indexedFaces = await listIndexedFacesForGrouping(albumCollectionId)
+  const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
+
+  const seen = new Set<string>()
+  const result: UngroupedFacePublic[] = []
+
+  for (const row of rows) {
+    const key = `${row.imageId}:${row.faceId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push({
+      faceId: row.faceId,
+      imageId: row.imageId,
+      representativeCrop: bboxByFace.get(row.faceId) ?? null,
+      reason: classifyUngroupedReason(row.photoCount, minPhotos, row.qualityScore),
+    })
+  }
+
+  return result
 }
 
 async function enrichStatusWithGroups(
   row: PersonGroupingRow,
   collection: AlbumCollectionRow,
 ): Promise<PersonGroupingStatusPayload> {
-  const groups = await listVisiblePersonGroups(row.id)
+  const minPhotos = row.min_photos_threshold ?? PERSON_GROUPING_MIN_PHOTOS
+  const groups = await listDisplayPersonGroups(row.id, minPhotos)
   const publicGroups = await toPublicGroupsWithAvatars(groups, row.id, collection.id)
+  const ungroupedFaces = await buildUngroupedFacesPublic(row.id, collection.id, minPhotos)
   return {
     ...toStatusPayload(row),
     groups: publicGroups,
+    ungroupedFaces,
+    visibleGroups: publicGroups.length,
   }
 }
 
@@ -544,17 +608,18 @@ async function finalizeGrouping(
   const groupsToInsert = rawGroups.map((g, index) => {
     const repFace = g.representative
     const meetsMinPhotos = g.photoCount >= minPhotos
-    const meetsQuality = g.qualityScore >= PERSON_GROUPING_MIN_GROUP_QUALITY_SCORE
-    const isVisible = meetsMinPhotos && meetsQuality
+    const hasValidRep = Boolean(repFace.imageId)
+    const isLowConfidence = g.qualityScore < PERSON_GROUPING_LOW_CONFIDENCE_QUALITY_SCORE
+    const isVisible = meetsMinPhotos && hasValidRep
     if (!meetsMinPhotos) hiddenByMinPhotos += 1
-    else if (!meetsQuality) lowConfidenceGroups += 1
+    else if (isLowConfidence) lowConfidenceGroups += 1
 
     return {
       personIndex: index + 1,
       photoCount: g.photoCount,
       faceInstanceCount: g.faces.length,
-      representativeImageId: repFace.imageId,
-      representativeCrop: repFace.crop,
+      representativeImageId: repFace.imageId || g.faces[0]?.imageId || '',
+      representativeCrop: repFace.crop ?? bboxByFace.get(repFace.faceId) ?? null,
       qualityScore: g.qualityScore,
       isVisible,
       faces: g.faces.map((f) => ({
@@ -1041,7 +1106,13 @@ export async function getPersonGroupDetail(input: {
   | { ok: false; error: { code: PersonGroupingErrorCode; message: string } }
 > {
   const group = await getPersonGroupById(input.groupId)
-  if (!group || !group.is_visible) {
+  if (!group) {
+    return fail('PERSON_GROUPING_NOT_FOUND')
+  }
+
+  const grouping = await findPersonGroupingByVersion(group.album_collection_id, PERSON_GROUPING_ALGORITHM_VERSION)
+  const minPhotos = grouping?.min_photos_threshold ?? PERSON_GROUPING_MIN_PHOTOS
+  if (group.photo_count < minPhotos) {
     return fail('PERSON_GROUPING_NOT_FOUND')
   }
 

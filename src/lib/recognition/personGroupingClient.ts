@@ -1,4 +1,4 @@
-import type { PersonGroupPublic, PersonGroupingReadStatus, PersonGroupingStatusPayload } from '../../types/personGrouping'
+import type { PersonGroupPublic, PersonGroupingReadStatus, PersonGroupingStatusPayload, UngroupedFacePublic } from '../../types/personGrouping'
 import { apiGetJson, apiPostJson, isApiTransportError } from '../api/apiFetch'
 import { supabase } from '../supabase/client'
 
@@ -112,7 +112,7 @@ export async function runPersonGroupingPipeline(
   albumUrl: string,
   onProgress?: (status: PersonGroupingStatusPayload) => void,
 ): Promise<
-  | { ok: true; groups: PersonGroupPublic[]; status: PersonGroupingStatusPayload }
+  | { ok: true; groups: PersonGroupPublic[]; ungroupedFaces: UngroupedFacePublic[]; status: PersonGroupingStatusPayload }
   | { ok: false; message: string; code?: string }
 > {
   const ensured = await ensurePersonGrouping(albumUrl)
@@ -121,14 +121,24 @@ export async function runPersonGroupingPipeline(
   onProgress?.(ensured.status)
 
   if (ensured.status.status === 'ready' && ensured.status.groups) {
-    return { ok: true, groups: ensured.status.groups, status: ensured.status }
+    return {
+      ok: true,
+      groups: ensured.status.groups,
+      ungroupedFaces: ensured.status.ungroupedFaces ?? [],
+      status: ensured.status,
+    }
   }
 
   if (!ensured.needsProcessing) {
     if (ensured.status.status === 'failed') {
       return { ok: false, message: ensured.status.message, code: 'PERSON_GROUPING_FAILED' }
     }
-    return { ok: true, groups: ensured.status.groups ?? [], status: ensured.status }
+    return {
+      ok: true,
+      groups: ensured.status.groups ?? [],
+      ungroupedFaces: ensured.status.ungroupedFaces ?? [],
+      status: ensured.status,
+    }
   }
 
   let attempts = 0
@@ -144,6 +154,7 @@ export async function runPersonGroupingPipeline(
       return {
         ok: true,
         groups: batch.status.groups ?? [],
+        ungroupedFaces: batch.status.ungroupedFaces ?? [],
         status: batch.status,
       }
     }

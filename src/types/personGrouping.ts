@@ -23,6 +23,19 @@ export interface PersonGroupPublic {
     Top?: number
   } | null
   avatarCandidates?: PersonGroupAvatarCandidate[]
+  lowConfidence?: boolean
+}
+
+export interface UngroupedFacePublic {
+  faceId: string
+  imageId: string
+  representativeCrop: {
+    Width?: number
+    Height?: number
+    Left?: number
+    Top?: number
+  } | null
+  reason: 'singleton' | 'low_quality' | 'insufficient_photos'
 }
 
 export interface PersonGroupingStatusPayload {
@@ -36,6 +49,7 @@ export interface PersonGroupingStatusPayload {
   visibleGroups: number
   message: string
   groups?: PersonGroupPublic[]
+  ungroupedFaces?: UngroupedFacePublic[]
 }
 
 export function isPersonGroupingEnabled(): boolean {

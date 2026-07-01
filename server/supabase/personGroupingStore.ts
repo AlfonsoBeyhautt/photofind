@@ -486,6 +486,83 @@ export async function listPersonGroupFaceMembers(
   }))
 }
 
+export async function listDisplayPersonGroups(
+  groupingId: string,
+  minPhotos: number,
+): Promise<PersonGroupRow[]> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return []
+
+  const { data, error } = await admin.client
+    .from('album_person_groups')
+    .select('*')
+    .eq('grouping_id', groupingId)
+    .gte('photo_count', minPhotos)
+    .order('person_index', { ascending: true })
+
+  if (error) {
+    console.error('[PhotoFind:PersonGroups] list_display_groups', error.message)
+    return []
+  }
+
+  return (data ?? []).filter((row) => Boolean((row as PersonGroupRow).representative_image_id)) as PersonGroupRow[]
+}
+
+export async function listUngroupedFacesForGrouping(
+  groupingId: string,
+  minPhotos: number,
+): Promise<Array<{
+  faceId: string
+  imageId: string
+  photoCount: number
+  qualityScore: number | null
+}>> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return []
+
+  const { data: hiddenGroups, error: groupsError } = await admin.client
+    .from('album_person_groups')
+    .select('id, photo_count, quality_score')
+    .eq('grouping_id', groupingId)
+    .lt('photo_count', minPhotos)
+
+  if (groupsError) {
+    console.error('[PhotoFind:PersonGroups] list_ungrouped_groups', groupsError.message)
+    return []
+  }
+
+  const groupIds = (hiddenGroups ?? []).map((g) => g.id as string)
+  if (groupIds.length === 0) return []
+
+  const qualityByGroup = new Map(
+    (hiddenGroups ?? []).map((g) => [g.id as string, {
+      photoCount: g.photo_count as number,
+      qualityScore: g.quality_score as number | null,
+    }]),
+  )
+
+  const { data: faces, error: facesError } = await admin.client
+    .from('album_person_group_faces')
+    .select('group_id, face_id, image_id')
+    .eq('grouping_id', groupingId)
+    .in('group_id', groupIds)
+
+  if (facesError) {
+    console.error('[PhotoFind:PersonGroups] list_ungrouped_faces', facesError.message)
+    return []
+  }
+
+  return (faces ?? []).map((row) => {
+    const meta = qualityByGroup.get(row.group_id as string)
+    return {
+      faceId: row.face_id as string,
+      imageId: row.image_id as string,
+      photoCount: meta?.photoCount ?? 1,
+      qualityScore: meta?.qualityScore ?? null,
+    }
+  })
+}
+
 export async function listVisiblePersonGroups(
   groupingId: string,
 ): Promise<PersonGroupRow[]> {

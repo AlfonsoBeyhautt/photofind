@@ -18,7 +18,7 @@ import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { getDownloadUrl } from '../lib/images/imageUrls'
 import { runPersonGroupingPipeline, fetchPersonGroupDetail } from '../lib/recognition/personGroupingClient'
-import { isPersonGroupingEnabled, type PersonGroupPublic, type PersonGroupingStatusPayload } from '../types/personGrouping'
+import { isPersonGroupingEnabled, type PersonGroupPublic, type PersonGroupingStatusPayload, type UngroupedFacePublic } from '../types/personGrouping'
 import type { AlbumImage } from '../types/album'
 import { cn } from '../lib/utils'
 
@@ -32,6 +32,7 @@ export function PersonGroupsPage() {
 
   const [view, setView] = useState<View>('grid')
   const [groups, setGroups] = useState<PersonGroupPublic[]>([])
+  const [ungroupedFaces, setUngroupedFaces] = useState<UngroupedFacePublic[]>([])
   const [status, setStatus] = useState<PersonGroupingStatusPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +41,7 @@ export function PersonGroupsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [ungroupedLightboxImage, setUngroupedLightboxImage] = useState<AlbumImage | null>(null)
 
   const featureEnabled = isPersonGroupingEnabled()
 
@@ -57,6 +59,7 @@ export function PersonGroupsPage() {
     }
 
     setGroups(result.groups)
+    setUngroupedFaces(result.ungroupedFaces)
     setStatus(result.status)
   }, [albumUrl, featureEnabled])
 
@@ -224,7 +227,7 @@ export function PersonGroupsPage() {
           <p className="text-center text-text-muted py-8">Cargando álbum…</p>
         )}
 
-        {view === 'grid' && !loading && status?.status === 'ready' && groups.length === 0 && (
+        {view === 'grid' && !loading && status?.status === 'ready' && groups.length === 0 && ungroupedFaces.length === 0 && (
           <div className="glass rounded-2xl p-8 text-center">
             <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
             <p className="font-medium mb-1">No encontramos grupos visibles</p>
@@ -246,6 +249,33 @@ export function PersonGroupsPage() {
               />
             ))}
           </div>
+        )}
+
+        {view === 'grid' && !loading && status?.status === 'ready' && ungroupedFaces.length > 0 && (
+          <section className={cn(groups.length > 0 && 'mt-10 pt-8 border-t border-border/50')}>
+            <h2 className="font-display text-lg font-semibold mb-1">Rostros sin agrupar</h2>
+            <p className="text-sm text-text-muted mb-4">
+              Caras detectadas que no formaron un grupo con al menos 2 fotos. Tocá un rostro para ver la foto original.
+            </p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+              {ungroupedFaces.map((face) => (
+                <UngroupedFaceTile
+                  key={`${face.imageId}:${face.faceId}`}
+                  face={face}
+                  albumImages={album?.images ?? []}
+                  onOpenImage={(img) => setUngroupedLightboxImage(img)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {ungroupedLightboxImage && (
+          <PhotoLightbox
+            images={[ungroupedLightboxImage]}
+            initialIndex={0}
+            onClose={() => setUngroupedLightboxImage(null)}
+          />
         )}
 
         {view === 'group' && selectedGroup && album && (
@@ -359,10 +389,49 @@ function PersonGroupCard({
         size={64}
       />
       <div className="flex-1 min-w-0">
-        <p className="font-semibold">{group.personLabel}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-semibold">{group.personLabel}</p>
+          {group.lowConfidence && (
+            <Badge variant="amber" className="text-[10px] py-0">Baja confianza</Badge>
+          )}
+        </div>
         <p className="text-sm text-text-muted">{group.photoCount.toLocaleString()} fotos</p>
       </div>
       <ChevronRight className="w-5 h-5 text-text-dim shrink-0" />
     </motion.button>
+  )
+}
+
+function UngroupedFaceTile({
+  face,
+  albumImages,
+  onOpenImage,
+}: {
+  face: UngroupedFacePublic
+  albumImages: AlbumImage[]
+  onOpenImage: (image: AlbumImage) => void
+}) {
+  const image = albumImages.find((img) => img.id === face.imageId)
+  if (!image) {
+    return (
+      <div className="aspect-square rounded-xl bg-white/5 border border-border/40 flex items-center justify-center">
+        <Users className="w-5 h-5 text-text-dim" />
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenImage(image)}
+      className="aspect-square rounded-xl overflow-hidden border border-border/40 hover:border-violet/40 transition-colors bg-black/20 flex items-center justify-center p-1"
+      title="Ver foto original"
+    >
+      <PersonFaceAvatar
+        image={image}
+        faceBox={representativeCropToFaceBox(face.representativeCrop)}
+        size={72}
+      />
+    </button>
   )
 }

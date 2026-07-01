@@ -35,10 +35,10 @@ export const PERSON_GROUPING_SEARCH_BATCH_SIZE = 8
 export const PERSON_GROUPING_MAX_FACE_MATCHES = 4096
 
 /** Min detection confidence to use a face as clustering seed. */
-export const PERSON_GROUPING_MIN_SEED_CONFIDENCE = 75
+export const PERSON_GROUPING_MIN_SEED_CONFIDENCE = 65
 
-/** Min bbox area (fraction of frame) for clustering seeds — helps group photos. */
-export const PERSON_GROUPING_MIN_SEED_BBOX_AREA = 0.0012
+/** Min bbox area (fraction of frame) for clustering seeds. */
+export const PERSON_GROUPING_MIN_SEED_BBOX_AREA = 0.0008
 
 /** Representatives per group used in the merge pass. */
 export const PERSON_GROUPING_MERGE_REPRESENTATIVES = 3
@@ -52,8 +52,8 @@ export const PERSON_GROUPING_MERGE_SIMILARITY_THRESHOLD = 82
 /** Merge pass: auto-merge on a single strong match. */
 export const PERSON_GROUPING_MERGE_HIGH_CONFIDENCE = 88
 
-/** Groups below this representative quality score are marked low-confidence. */
-export const PERSON_GROUPING_MIN_GROUP_QUALITY_SCORE = 8
+/** Below this quality_score (confidence × bboxArea) a visible group is labeled low-confidence. */
+export const PERSON_GROUPING_LOW_CONFIDENCE_QUALITY_SCORE = 1.5
 
 /** Warn in UI when album exceeds this size (async pipeline later). */
 export const LARGE_ALBUM_WARNING_PHOTOS = 500
