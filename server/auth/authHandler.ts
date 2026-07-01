@@ -12,6 +12,7 @@ import {
 import { getEventCategoriesByUrlHashes, hashAlbumUrl } from '../supabase/albumCollectionStore'
 import { listResumableJobsForUser } from '../supabase/albumProcessingJobStore'
 import { cancelAlbumJobForUser } from '../recognize/albumJobService'
+import { getOperatorAccessForUser } from '../admin/operatorAccess'
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.statusCode = status
@@ -65,7 +66,8 @@ export async function handleMeRequest(req: IncomingMessage, res: ServerResponse)
     }
 
     const facialProfile = await getFacialProfileMeta(user.id)
-    sendJson(res, 200, { ok: true, user, facialProfile })
+    const operatorAccess = await getOperatorAccessForUser(user.id)
+    sendJson(res, 200, { ok: true, user, facialProfile, ...operatorAccess })
   } catch (err) {
     if (err instanceof SupabaseConfigError) {
       logAuthMeError(err, 'supabase_config')
@@ -227,6 +229,7 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
       }
     })
     const activeAlbumJobs = await listResumableJobsForUser(user.id)
+    const operatorAccess = await getOperatorAccessForUser(user.id)
 
     sendJson(res, 200, {
       ok: true,
@@ -235,6 +238,7 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
       recentSearches,
       processedAlbums,
       activeAlbumJobs,
+      ...operatorAccess,
     })
   } catch (err) {
     console.error('[PhotoFind:Server] dashboard_error', err instanceof Error ? err.message : err)

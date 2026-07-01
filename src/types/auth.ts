@@ -26,6 +26,8 @@ export interface AuthMeResponse {
   ok: true
   user: AuthUser | null
   facialProfile: FacialProfileState
+  /** Solo presente cuando el backend confirma administrador autorizado. */
+  operatorAccess?: true
 }
 
 export interface AuthSuccessResponse {
@@ -97,6 +99,8 @@ export interface DashboardData {
   recentSearches: SearchHistoryItem[]
   processedAlbums: ProcessedAlbumItem[]
   activeAlbumJobs: ActiveAlbumJobItem[]
+  /** Solo presente cuando el backend confirma administrador autorizado. */
+  operatorAccess?: true
 }
 
 export interface RecordSearchBody {

@@ -15,11 +15,14 @@ interface AuthContextType {
   facialProfile: FacialProfileState
   isLoggedIn: boolean
   loading: boolean
+  /** true solo si /api/auth/me confirmó operatorAccess */
+  operatorAccess: boolean
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   register: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => Promise<void>
   refreshAuth: () => Promise<void>
   setFacialProfile: (profile: FacialProfileState) => void
+  setOperatorAccess: (value: boolean) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -27,6 +30,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [facialProfile, setFacialProfile] = useState<FacialProfileState>({ hasProfile: false })
+  const [operatorAccess, setOperatorAccess] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const refreshAuth = useCallback(async () => {
@@ -34,9 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await fetchMe()
       setUser(data.user)
       setFacialProfile(data.facialProfile)
+      setOperatorAccess(data.operatorAccess === true)
     } catch {
       setUser(null)
       setFacialProfile({ hasProfile: false })
+      setOperatorAccess(false)
     }
   }, [])
 
@@ -50,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null)
         setFacialProfile({ hasProfile: false })
+        setOperatorAccess(false)
       }
     })
 
@@ -80,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null)
       setFacialProfile({ hasProfile: false })
+      setOperatorAccess(false)
     }
   }, [])
 
@@ -90,11 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         facialProfile,
         isLoggedIn: !!user,
         loading,
+        operatorAccess,
         login,
         register,
         logout,
         refreshAuth,
         setFacialProfile,
+        setOperatorAccess,
       }}
     >
       {children}

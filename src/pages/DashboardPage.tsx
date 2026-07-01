@@ -12,6 +12,7 @@ import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { FacialProfileSection } from '../components/account/FacialProfileSection'
 import { ActiveAlbumJobsSection } from '../components/dashboard/ActiveAlbumJobsSection'
 import { PremiumPersonGroupingSection } from '../components/dashboard/PremiumPersonGroupingSection'
+import { OperatorAccessCard } from '../components/dashboard/OperatorAccessCard'
 import { useAuth } from '../context/AuthContext'
 import {
   fetchDashboard,
@@ -34,7 +35,7 @@ import { eventCategoryLabel } from '../lib/eventCategories'
 import { isPersonGroupingEnabled } from '../types/personGrouping'
 
 export function DashboardPage() {
-  const { user, facialProfile } = useAuth()
+  const { user, facialProfile, setOperatorAccess } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([])
@@ -57,11 +58,14 @@ export function DashboardPage() {
       setRecentSearches(data.recentSearches)
       setProcessedAlbums(data.processedAlbums)
       setActiveAlbumJobs(matchResumableAlbumJobs(data.activeAlbumJobs ?? []))
+      if (data.operatorAccess === true) {
+        setOperatorAccess(true)
+      }
       setLoading(false)
     }
     void load()
     return () => { cancelled = true }
-  }, [facialProfile])
+  }, [facialProfile, setOperatorAccess])
 
   useEffect(() => {
     if (loading) return
@@ -330,6 +334,8 @@ export function DashboardPage() {
             </Button>
           </Link>
         </motion.div>
+
+        <OperatorAccessCard className="mt-6" />
       </div>
     </div>
   )

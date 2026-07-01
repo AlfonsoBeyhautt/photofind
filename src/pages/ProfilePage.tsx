@@ -6,6 +6,7 @@ import { GlowOrbs } from '../components/effects/GlowOrbs'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { FacialProfileSection } from '../components/account/FacialProfileSection'
+import { OperatorAccessButton } from '../components/dashboard/OperatorAccessCard'
 import { useAuth } from '../context/AuthContext'
 import { formatMemberSince, userAvatarUrl } from '../lib/auth/authClient'
 
@@ -48,6 +49,7 @@ export function ProfilePage() {
                   Dashboard
                 </Button>
               </Link>
+              <OperatorAccessButton />
               <Link to="/" className="w-full sm:w-auto">
                 <Button variant="primary" size="md" className="w-full sm:w-auto">Nueva búsqueda</Button>
               </Link>
