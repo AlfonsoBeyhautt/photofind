@@ -29,6 +29,7 @@ interface ProcessingScreenProps {
   referenceToken: string
   qualityWarning?: string
   userId?: string | null
+  initialRetry?: boolean
   onComplete: (result: RecognitionSearchResult) => void
   onError: () => void
 }
@@ -39,6 +40,7 @@ export function ProcessingScreen({
   albumUrl,
   referenceToken,
   userId,
+  initialRetry = false,
   onComplete,
   onError,
 }: ProcessingScreenProps) {
@@ -55,6 +57,7 @@ export function ProcessingScreen({
       provider={provider as 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'}
       referenceToken={referenceToken}
       userId={userId}
+      initialRetry={initialRetry}
       onComplete={onComplete}
       onError={onError}
       fetchAlbum={fetchAlbum}
@@ -69,6 +72,7 @@ interface AlbumProcessingScreenProps {
   provider: 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'
   referenceToken: string
   userId?: string | null
+  initialRetry?: boolean
   onComplete: (result: RecognitionSearchResult) => void
   onError: () => void
   fetchAlbum: (url: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
@@ -90,6 +94,7 @@ function AlbumProcessingScreen({
   provider,
   referenceToken,
   userId,
+  initialRetry = false,
   onComplete,
   onError,
   fetchAlbum,
@@ -118,7 +123,7 @@ function AlbumProcessingScreen({
   const [asyncMode, setAsyncMode] = useState(false)
   const [canLeaveScreen, setCanLeaveScreen] = useState(false)
   const [canRetry, setCanRetry] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
+  const [retryCount, setRetryCount] = useState(initialRetry ? 1 : 0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const fetchAlbumRef = useRef(fetchAlbum)
@@ -343,12 +348,13 @@ function AlbumProcessingScreen({
     return () => {
       cancelled = true
       abort.abort()
+      resetProcessingKey(processingKey)
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
     }
-  }, [albumUrl, referenceToken, retryCount])
+  }, [albumUrl, referenceToken, retryCount, processingKey])
 
   if (phase === 'error') {
     const friendly = PROVIDER_FETCH_ERROR[provider]

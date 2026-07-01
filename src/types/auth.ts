@@ -73,12 +73,29 @@ export interface ProcessedAlbumItem {
   searchCount: number
 }
 
+export type ActiveAlbumJobStatus = 'pending' | 'processing' | 'retrying' | 'ready' | 'failed'
+
+export interface ActiveAlbumJobItem {
+  jobId: string
+  status: ActiveAlbumJobStatus
+  message: string
+  totalImages: number
+  indexedImages: number
+  failedImages: number
+  progressPercent: number
+  provider: string
+  albumName: string | null
+  albumFingerprint: string
+  updatedAt: string
+}
+
 export interface DashboardData {
   ok: true
   user: AuthUser
   facialProfile: FacialProfileState
   recentSearches: SearchHistoryItem[]
   processedAlbums: ProcessedAlbumItem[]
+  activeAlbumJobs: ActiveAlbumJobItem[]
 }
 
 export interface RecordSearchBody {

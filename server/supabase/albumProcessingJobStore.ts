@@ -260,3 +260,65 @@ export function jobStatusMessage(job: AlbumProcessingJobRow): string {
       return 'Procesando álbum'
   }
 }
+
+export interface ResumableAlbumJobSummary {
+  jobId: string
+  status: AlbumJobStatus
+  message: string
+  totalImages: number
+  indexedImages: number
+  failedImages: number
+  progressPercent: number
+  provider: string
+  albumName: string | null
+  albumFingerprint: string
+  updatedAt: string
+}
+
+const RESUMABLE_STATUSES: AlbumJobStatus[] = ['pending', 'processing', 'retrying', 'ready', 'failed']
+
+export async function listResumableJobsForUser(
+  userId: string,
+): Promise<ResumableAlbumJobSummary[]> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return []
+
+  const { data, error } = await admin.client
+    .from('album_processing_jobs')
+    .select('*, album_collections(folder_name, provider)')
+    .eq('user_id', userId)
+    .in('status', RESUMABLE_STATUSES)
+    .order('updated_at', { ascending: false })
+    .limit(10)
+
+  if (error) {
+    console.error('[PhotoFind:Jobs] list_resumable', error.message)
+    return []
+  }
+
+  const rows = (data ?? []) as (AlbumProcessingJobRow & {
+    album_collections: { folder_name: string | null; provider: string | null } | null
+  })[]
+
+  return rows
+    .filter((row) => !isExpired(row))
+    .map((row) => {
+      const progressPercent = row.total_images > 0
+        ? Math.min(100, Math.round((row.indexed_images / row.total_images) * 100))
+        : 0
+
+      return {
+        jobId: row.id,
+        status: row.status,
+        message: jobStatusMessage(row),
+        totalImages: row.total_images,
+        indexedImages: row.indexed_images,
+        failedImages: row.failed_images,
+        progressPercent,
+        provider: row.album_collections?.provider ?? row.provider,
+        albumName: row.album_collections?.folder_name ?? null,
+        albumFingerprint: row.album_fingerprint,
+        updatedAt: row.updated_at,
+      }
+    })
+}

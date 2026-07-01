@@ -10,6 +10,7 @@ import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { FacialProfileSection } from '../components/account/FacialProfileSection'
+import { ActiveAlbumJobsSection } from '../components/dashboard/ActiveAlbumJobsSection'
 import { useAuth } from '../context/AuthContext'
 import {
   fetchDashboard,
@@ -19,6 +20,13 @@ import {
   providerLabel,
   userAvatarUrl,
 } from '../lib/auth/authClient'
+import {
+  jobFromStatusPayload,
+  jobProgressFromPoll,
+  matchResumableAlbumJobs,
+  type ResumableAlbumJob,
+} from '../lib/recognition/activeAlbumJobs'
+import { clearActiveAlbumJob, pollAlbumJobStatus } from '../lib/recognition/albumJobClient'
 import type { ProcessedAlbumItem, SearchHistoryItem } from '../types/auth'
 import { EVENT_CATEGORIES } from '../data/mock'
 
@@ -32,6 +40,8 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([])
   const [processedAlbums, setProcessedAlbums] = useState<ProcessedAlbumItem[]>([])
+  const [activeAlbumJobs, setActiveAlbumJobs] = useState<ResumableAlbumJob[]>([])
+  const [pollingJobs, setPollingJobs] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -47,11 +57,60 @@ export function DashboardPage() {
       }
       setRecentSearches(data.recentSearches)
       setProcessedAlbums(data.processedAlbums)
+      setActiveAlbumJobs(matchResumableAlbumJobs(data.activeAlbumJobs ?? []))
       setLoading(false)
     }
     void load()
     return () => { cancelled = true }
   }, [facialProfile])
+
+  useEffect(() => {
+    if (activeAlbumJobs.length === 0) return
+
+    const inProgress = activeAlbumJobs.some((job) =>
+      job.status === 'pending' || job.status === 'processing' || job.status === 'retrying',
+    )
+    if (!inProgress) return
+
+    let cancelled = false
+
+    const poll = async () => {
+      const jobId = activeAlbumJobs[0]?.jobId
+      if (!jobId) return
+
+      setPollingJobs(true)
+      const result = await pollAlbumJobStatus(jobId, (update) => {
+        if (cancelled) return
+        setActiveAlbumJobs((current) => {
+          const job = current.find((item) => item.jobId === jobId)
+          if (!job) return current
+          return [jobProgressFromPoll(update, job)]
+        })
+      })
+      setPollingJobs(false)
+
+      if (cancelled) return
+
+      if (!result.ok) {
+        clearActiveAlbumJob()
+        setActiveAlbumJobs([])
+        return
+      }
+
+      setActiveAlbumJobs((current) => {
+        const job = current.find((item) => item.jobId === jobId)
+        if (!job) return current
+        return [jobFromStatusPayload(result.status, job)]
+      })
+    }
+
+    void poll()
+    const interval = setInterval(() => { void poll() }, 4000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [activeAlbumJobs.length, activeAlbumJobs[0]?.jobId, activeAlbumJobs[0]?.status])
 
   return (
     <div className="relative min-h-screen">
@@ -109,6 +168,8 @@ export function DashboardPage() {
             </Link>
           </div>
         </motion.div>
+
+        <ActiveAlbumJobsSection jobs={activeAlbumJobs} polling={pollingJobs} />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}

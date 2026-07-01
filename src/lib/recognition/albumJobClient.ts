@@ -184,6 +184,8 @@ async function runAsyncJobLoop(
   saveActiveAlbumJob({
     jobId,
     albumUrl,
+    albumName: album.folderName,
+    provider: album.source,
     albumFingerprint: start.albumFingerprint,
     referenceToken,
     albumCollectionId: start.albumCollectionId,

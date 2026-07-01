@@ -3,6 +3,8 @@ const STORAGE_KEY = 'photofind_active_album_job'
 export interface StoredAlbumJob {
   jobId: string
   albumUrl: string
+  albumName?: string
+  provider?: string
   albumFingerprint: string
   referenceToken: string
   albumCollectionId: string

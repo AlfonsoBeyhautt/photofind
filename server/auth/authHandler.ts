@@ -9,6 +9,7 @@ import {
   listRecentSearches,
   recordSearch,
 } from '../supabase/searchHistoryStore'
+import { listResumableJobsForUser } from '../supabase/albumProcessingJobStore'
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.statusCode = status
@@ -213,6 +214,7 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
     const facialProfile = await getFacialProfileMeta(user.id)
     const recentSearches = await listRecentSearches(user.id, 20)
     const processedAlbums = buildProcessedAlbums(recentSearches)
+    const activeAlbumJobs = await listResumableJobsForUser(user.id)
 
     sendJson(res, 200, {
       ok: true,
@@ -220,6 +222,7 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
       facialProfile,
       recentSearches,
       processedAlbums,
+      activeAlbumJobs,
     })
   } catch (err) {
     console.error('[PhotoFind:Server] dashboard_error', err instanceof Error ? err.message : err)

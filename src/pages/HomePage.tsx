@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { Navbar } from '../components/layout/Navbar'
 import { GlowOrbs } from '../components/effects/GlowOrbs'
@@ -12,6 +13,7 @@ import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { recordSearch } from '../lib/auth/authClient'
 import { resetAllProcessingRuns } from '../lib/processing/processingRunGuard'
+import type { ResumeAlbumJobState } from '../lib/recognition/activeAlbumJobs'
 import type { RecognitionSearchResult } from '../types/recognition'
 
 type FlowStep = 'hero' | 'person' | 'processing' | 'results'
@@ -23,9 +25,31 @@ type FlowData = PersonContinueData & {
 export function HomePage() {
   const { album, thumbnailsReady, setAlbumUrl, resetAlbum } = useAlbum()
   const { isLoggedIn, user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [step, setStep] = useState<FlowStep>('hero')
   const [flowData, setFlowData] = useState<FlowData | null>(null)
   const [searchResult, setSearchResult] = useState<RecognitionSearchResult | null>(null)
+  const [initialRetry, setInitialRetry] = useState(false)
+
+  useEffect(() => {
+    const resume = (location.state as { resumeAlbumJob?: ResumeAlbumJobState } | null)?.resumeAlbumJob
+    if (!resume?.albumUrl || !resume.referenceToken) return
+
+    setAlbumUrl(resume.albumUrl)
+    setSearchResult(null)
+    setInitialRetry(Boolean(resume.retry))
+    setFlowData({
+      albumUrl: resume.albumUrl,
+      method: 'upload',
+      category: 'fiesta',
+      extraInfo: {},
+      referenceToken: resume.referenceToken,
+      faceBox: { left: 0, top: 0, width: 0, height: 0 },
+    })
+    setStep('processing')
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, navigate, setAlbumUrl])
 
   const handleAnalyze = useCallback((url: string) => {
     setAlbumUrl(url)
@@ -76,6 +100,7 @@ export function HomePage() {
     setStep('hero')
     setFlowData(null)
     setSearchResult(null)
+    setInitialRetry(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [resetAlbum])
 
@@ -99,11 +124,12 @@ export function HomePage() {
           )}
           {step === 'processing' && flowData && flowData.referenceToken && (
             <ProcessingScreen
-              key={`processing-${flowData.albumUrl}-${flowData.referenceToken}`}
+              key={`processing-${flowData.albumUrl}-${flowData.referenceToken}-${initialRetry ? 'retry' : 'run'}`}
               albumUrl={flowData.albumUrl}
               referenceToken={flowData.referenceToken}
               qualityWarning={flowData.qualityWarning}
               userId={user?.id ?? null}
+              initialRetry={initialRetry}
               onComplete={handleProcessingComplete}
               onError={handleProcessingError}
             />
