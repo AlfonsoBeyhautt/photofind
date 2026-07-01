@@ -16,11 +16,16 @@ export const REFERENCE_TTL_MS = 15 * 60 * 1000
 /** Max reference image dimension sent to Rekognition. */
 export const REFERENCE_MAX_DIMENSION = 1920
 
-/** Phase 2A: max album photos to compare per run (trial mode). */
+/** Phase 2A fallback: max album photos to compare per run. */
 export const COMPARE_PHASE_MAX_PHOTOS = 50
+
+/** Images per IndexFaces request batch (keeps Vercel under 60s). */
+export const INDEX_BATCH_SIZE = 10
+
+/** Warn in UI when album exceeds this size (async pipeline later). */
+export const LARGE_ALBUM_WARNING_PHOTOS = 500
 
 /**
  * Face quality thresholds live in faceQuality.ts (tiered high / medium / low).
  * Guided multi-pose profiles: see FUTURE.md
- * Phase 2B: collections, IndexFaces, SearchFacesByImage — see FUTURE.md
  */

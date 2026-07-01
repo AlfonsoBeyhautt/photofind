@@ -121,6 +121,9 @@ export type RecognitionSearchErrorCode =
   | 'RECOGNITION_NO_FACES_IN_ALBUM'
   | 'RECOGNITION_INDEXING_FAILED'
   | 'RECOGNITION_SEARCH_FAILED'
+  | 'RECOGNITION_COLLECTION_METADATA_ERROR'
+
+export type RecognitionSearchMethod = 'collection' | 'compare-fallback'
 
 export interface RecognitionSearchResult {
   matchedImageIds: string[]
@@ -129,4 +132,8 @@ export interface RecognitionSearchResult {
   truncated: boolean
   trialModeMessage?: string
   similarities?: Record<string, number>
+  collectionReused?: boolean
+  searchMethod?: RecognitionSearchMethod
+  largeAlbumWarning?: string
+  asyncJobId?: string
 }

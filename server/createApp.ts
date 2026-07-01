@@ -29,6 +29,17 @@ import { getGoogleDriveApiKey } from './env'
 import { logStartupConfig } from './config/serverHealth'
 import { handleHealthRequest } from './debug/healthHandler'
 import { handleCompareAlbumRequest } from './recognize/compareSearchHandler'
+import {
+  handleAlbumJobProcessRequest,
+  handleAlbumJobSearchRequest,
+  handleAlbumJobStartRequest,
+  handleAlbumJobStatusRequest,
+} from './recognize/albumJobHandler'
+import {
+  handleIndexAlbumBatchRequest,
+  handlePrepareCollectionRequest,
+  handleSearchCollectionRequest,
+} from './recognize/collectionSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import {
   handleDeleteFacialProfileRequest,
@@ -191,6 +202,96 @@ export function createApp(options: CreateAppOptions = {}): Express {
       await handleCompareAlbumRequest(req, res, body)
     } catch (err) {
       console.error('[PhotoFind:Backend] compare_album_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos buscar coincidencias en el álbum.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/album-job-search', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handleAlbumJobSearchRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] album_job_search_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos buscar coincidencias en el álbum.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/album-job-start', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handleAlbumJobStartRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] album_job_start_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos iniciar el análisis del álbum.' },
+      })
+    }
+  })
+
+  app.get('/api/recognize/album-job-status', async (req, res) => {
+    try {
+      await handleAlbumJobStatusRequest(req, res)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] album_job_status_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos consultar el estado del análisis.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/album-job-process', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handleAlbumJobProcessRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] album_job_process_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos procesar el siguiente lote del álbum.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/collection-prepare', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handlePrepareCollectionRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] collection_prepare_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos preparar el análisis del álbum.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/collection-index', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handleIndexAlbumBatchRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] collection_index_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'RECOGNITION_INDEXING_FAILED', message: 'No pudimos indexar caras del álbum.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/collection-search', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handleSearchCollectionRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] collection_search_unhandled', err instanceof Error ? err.message : err)
       res.status(500).json({
         ok: false,
         error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos buscar coincidencias en el álbum.' },

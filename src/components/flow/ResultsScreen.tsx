@@ -124,6 +124,11 @@ export function ResultsScreen({
               {searchResult.trialModeMessage && (
                 <p className="text-sm text-amber-300/90 mt-2">{searchResult.trialModeMessage}</p>
               )}
+              {searchResult.collectionReused && searchResult.searchMethod === 'collection' && (
+                <p className="text-sm text-emerald-300/80 mt-2">
+                  Reutilizamos el análisis previo de este álbum.
+                </p>
+              )}
               {qualityWarning && (
                 <p className="text-sm text-amber-200/80 mt-2 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />

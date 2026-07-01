@@ -26,6 +26,17 @@ import {
 } from './wetransferThumbnailHandler'
 import { fetchWeTransferAlbum } from './wetransferService'
 import { handleCompareAlbumRequest } from './recognize/compareSearchHandler'
+import {
+  handleAlbumJobProcessRequest,
+  handleAlbumJobSearchRequest,
+  handleAlbumJobStartRequest,
+  handleAlbumJobStatusRequest,
+} from './recognize/albumJobHandler'
+import {
+  handleIndexAlbumBatchRequest,
+  handlePrepareCollectionRequest,
+  handleSearchCollectionRequest,
+} from './recognize/collectionSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import { handleHealthRequest } from './debug/healthHandler'
 import {
@@ -219,6 +230,96 @@ export function driveApiPlugin(): Plugin {
           try {
             const body = await readBody(req)
             await handleCompareAlbumRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos buscar coincidencias en el álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/album-job-start') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handleAlbumJobStartRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos iniciar el análisis del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/album-job-status') && req.method === 'GET') {
+          try {
+            await handleAlbumJobStatusRequest(req, res)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos consultar el estado del análisis.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/album-job-process') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handleAlbumJobProcessRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos procesar el siguiente lote del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/album-job-search') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handleAlbumJobSearchRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos buscar coincidencias en el álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/collection-prepare') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handlePrepareCollectionRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'RECOGNITION_SEARCH_FAILED', message: 'No pudimos preparar el análisis del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/collection-index') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handleIndexAlbumBatchRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'RECOGNITION_INDEXING_FAILED', message: 'No pudimos indexar caras del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/collection-search') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handleSearchCollectionRequest(req, res, body)
           } catch {
             sendJson(res, 500, {
               ok: false,

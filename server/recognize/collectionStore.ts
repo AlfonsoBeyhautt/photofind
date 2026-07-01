@@ -24,8 +24,14 @@ function purgeExpired(): void {
   }
 }
 
-export function collectionIdForAlbum(source: string, folderId: string): string {
-  const safe = `${source}_${folderId}`
+/** AWS-safe collection id tied to album identity + content fingerprint. */
+export function collectionIdForAlbum(
+  source: string,
+  folderId: string,
+  albumFingerprint: string,
+): string {
+  const fpShort = albumFingerprint.slice(0, 12)
+  const safe = `${source}_${folderId}_${fpShort}`
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .slice(0, 200)
   return `pf_${safe}`

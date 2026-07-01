@@ -22,7 +22,7 @@ type FlowData = PersonContinueData & {
 
 export function HomePage() {
   const { album, thumbnailsReady, setAlbumUrl, resetAlbum } = useAlbum()
-  const { isLoggedIn } = useAuth()
+  const { isLoggedIn, user } = useAuth()
   const [step, setStep] = useState<FlowStep>('hero')
   const [flowData, setFlowData] = useState<FlowData | null>(null)
   const [searchResult, setSearchResult] = useState<RecognitionSearchResult | null>(null)
@@ -103,6 +103,7 @@ export function HomePage() {
               albumUrl={flowData.albumUrl}
               referenceToken={flowData.referenceToken}
               qualityWarning={flowData.qualityWarning}
+              userId={user?.id ?? null}
               onComplete={handleProcessingComplete}
               onError={handleProcessingError}
             />

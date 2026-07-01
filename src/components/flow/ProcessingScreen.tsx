@@ -9,7 +9,7 @@ import { useAlbum } from '../../context/AlbumContext'
 import { getDriveErrorMessage } from '../../lib/drive/errors'
 import { preloadAllThumbnails } from '../../lib/images/loadQueue'
 import { getGalleryThumbnailUrl } from '../../lib/images/imageUrls'
-import { compareAlbumToReference } from '../../lib/recognition/searchClient'
+import { runAlbumSearchPipeline, resumeStoredAlbumJob, ASYNC_JOB_MIN_PHOTOS } from '../../lib/recognition/albumJobClient'
 import { ProviderComingSoon } from './ProviderComingSoon'
 import { detectProviderFromUrl } from '../../lib/providers/detectProvider'
 import {
@@ -28,6 +28,7 @@ interface ProcessingScreenProps {
   albumUrl: string
   referenceToken: string
   qualityWarning?: string
+  userId?: string | null
   onComplete: (result: RecognitionSearchResult) => void
   onError: () => void
 }
@@ -37,7 +38,7 @@ const ACTIVE_PROVIDERS = new Set<AlbumProvider>(['google-drive', 'dropbox', 'pix
 export function ProcessingScreen({
   albumUrl,
   referenceToken,
-  qualityWarning,
+  userId,
   onComplete,
   onError,
 }: ProcessingScreenProps) {
@@ -53,7 +54,7 @@ export function ProcessingScreen({
       albumUrl={albumUrl}
       provider={provider as 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'}
       referenceToken={referenceToken}
-      qualityWarning={qualityWarning}
+      userId={userId}
       onComplete={onComplete}
       onError={onError}
       fetchAlbum={fetchAlbum}
@@ -67,7 +68,7 @@ interface AlbumProcessingScreenProps {
   albumUrl: string
   provider: 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'
   referenceToken: string
-  qualityWarning?: string
+  userId?: string | null
   onComplete: (result: RecognitionSearchResult) => void
   onError: () => void
   fetchAlbum: (url: string) => Promise<{ album: AlbumData | null; error: DriveError | null }>
@@ -75,7 +76,7 @@ interface AlbumProcessingScreenProps {
   setThumbnailsReady: (ready: boolean) => void
 }
 
-type Phase = 'fetching' | 'preloading' | 'comparing' | 'ready' | 'error'
+type Phase = 'fetching' | 'preloading' | 'recognizing' | 'ready' | 'error'
 
 const PROVIDER_FETCH_ERROR: Record<AlbumProcessingScreenProps['provider'], string> = {
   'google-drive': 'No pudimos leer el álbum de Google Drive.',
@@ -88,6 +89,7 @@ function AlbumProcessingScreen({
   albumUrl,
   provider,
   referenceToken,
+  userId,
   onComplete,
   onError,
   fetchAlbum,
@@ -103,25 +105,33 @@ function AlbumProcessingScreen({
   const [preloadFailed, setPreloadFailed] = useState(0)
   const [preloadCompleted, setPreloadCompleted] = useState(0)
   const [preloadTotal, setPreloadTotal] = useState(0)
-  const [compareDone, setCompareDone] = useState(0)
-  const [compareTotal, setCompareTotal] = useState(0)
+  const [recognizeDone, setRecognizeDone] = useState(0)
+  const [recognizeTotal, setRecognizeTotal] = useState(0)
+  const [recognizePhase, setRecognizePhase] = useState<'checking' | 'indexing' | 'searching'>('checking')
+  const [collectionReused, setCollectionReused] = useState(false)
   const [matchCount, setMatchCount] = useState(0)
   const [fetchedAlbum, setFetchedAlbum] = useState<AlbumData | null>(null)
   const [phase, setPhase] = useState<Phase>('fetching')
   const [statusLine, setStatusLine] = useState('Leyendo álbum...')
-  const [trialWarning, setTrialWarning] = useState<string | null>(null)
+  const [largeAlbumWarning, setLargeAlbumWarning] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [asyncMode, setAsyncMode] = useState(false)
+  const [canLeaveScreen, setCanLeaveScreen] = useState(false)
+  const [canRetry, setCanRetry] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const fetchAlbumRef = useRef(fetchAlbum)
   const onCompleteRef = useRef(onComplete)
   const setThumbnailsReadyRef = useRef(setThumbnailsReady)
   const errorRef = useRef(error)
+  const userIdRef = useRef(userId)
 
   fetchAlbumRef.current = fetchAlbum
   onCompleteRef.current = onComplete
   setThumbnailsReadyRef.current = setThumbnailsReady
   errorRef.current = error
+  userIdRef.current = userId
 
   const handleCancel = () => {
     abortRef.current?.abort()
@@ -154,12 +164,17 @@ function AlbumProcessingScreen({
       setPreloadFailed(0)
       setPreloadCompleted(0)
       setPreloadTotal(0)
-      setCompareDone(0)
-      setCompareTotal(0)
+      setRecognizeDone(0)
+      setRecognizeTotal(0)
+      setRecognizePhase('checking')
+      setCollectionReused(false)
       setMatchCount(0)
       setFetchedAlbum(null)
       setLocalError(null)
-      setTrialWarning(null)
+      setLargeAlbumWarning(null)
+      setAsyncMode(false)
+      setCanLeaveScreen(false)
+      setCanRetry(false)
       setThumbnailsReadyRef.current(false)
 
       try {
@@ -177,76 +192,137 @@ function AlbumProcessingScreen({
 
         setFetchedAlbum(album)
         setImageCount(album.totalImages)
-        if (album.totalImages > 50) {
-          setTrialWarning('Modo prueba: analizaremos las primeras 50 fotos.')
+        if (album.totalImages >= ASYNC_JOB_MIN_PHOTOS) {
+          setLargeAlbumWarning('Este álbum tiene muchas fotos. El análisis puede tardar varios minutos.')
+          setAsyncMode(true)
+          setCanLeaveScreen(true)
         }
-        setProgress(28)
-        setPhase('preloading')
-        setStatusLine('Preparando miniaturas...')
 
-        const thumbnailUrls = album.images.map((img) => getGalleryThumbnailUrl(img))
-        setPreloadTotal(thumbnailUrls.length)
+        const isLargeAlbum = album.totalImages >= ASYNC_JOB_MIN_PHOTOS
 
-        const result = await preloadAllThumbnails(
-          thumbnailUrls,
-          ({ loaded, failed, completed, total }) => {
-            if (cancelled || abort.signal.aborted) return
-            setPreloadLoaded(loaded)
-            setPreloadFailed(failed)
-            setPreloadCompleted(completed)
-            setPreloadTotal(total)
-            const pct = 28 + (completed / total) * 32
-            setProgress(pct)
-          },
-          abort.signal,
-        )
+        if (!isLargeAlbum) {
+          setProgress(28)
+          setPhase('preloading')
+          setStatusLine('Preparando miniaturas...')
 
-        if (cancelled || abort.signal.aborted) return
+          const thumbnailUrls = album.images.map((img) => getGalleryThumbnailUrl(img))
+          setPreloadTotal(thumbnailUrls.length)
 
-        if (result.loaded === 0) {
-          setLocalError('No pudimos cargar ninguna miniatura. Verificá la conexión e intentá de nuevo.')
-          setPhase('error')
-          markProcessingFailed(processingKey)
-          return
+          const result = await preloadAllThumbnails(
+            thumbnailUrls,
+            ({ loaded, failed, completed, total }) => {
+              if (cancelled || abort.signal.aborted) return
+              setPreloadLoaded(loaded)
+              setPreloadFailed(failed)
+              setPreloadCompleted(completed)
+              setPreloadTotal(total)
+              const pct = 28 + (completed / total) * 32
+              setProgress(pct)
+            },
+            abort.signal,
+          )
+
+          if (cancelled || abort.signal.aborted) return
+
+          if (result.loaded === 0) {
+            setLocalError('No pudimos cargar ninguna miniatura. Verificá la conexión e intentá de nuevo.')
+            setPhase('error')
+            markProcessingFailed(processingKey)
+            return
+          }
+        } else {
+          setStatusLine('Preparando álbum...')
+          setProgress(40)
         }
 
         setThumbnailsReadyRef.current(true)
         setProgress(62)
-        setPhase('comparing')
-        setStatusLine('Validando referencia...')
-        await new Promise((r) => setTimeout(r, 400))
+        setPhase('recognizing')
+        setStatusLine('Revisando si este álbum ya fue analizado...')
+        await new Promise((r) => setTimeout(r, 300))
         if (cancelled || abort.signal.aborted) return
 
-        setStatusLine('Buscando coincidencias...')
-        const compareResult = await compareAlbumToReference(
+        const resumed = await resumeStoredAlbumJob(
+          albumUrl,
           referenceToken,
-          album.images,
-          ({ compared, total, matched }) => {
+          album,
+          ({ phase: searchPhase, message, current, total, matched, collectionReused: reused, asyncMode: isAsync, canLeaveScreen: leaveOk, progressPercent }) => {
             if (cancelled || abort.signal.aborted) return
-            setCompareDone(compared)
-            setCompareTotal(total)
-            setMatchCount(matched)
-            setStatusLine(`Comparando fotos ${compared}/${total}`)
-            const pct = 62 + (compared / total) * 36
-            setProgress(pct)
+            setRecognizePhase(searchPhase)
+            setStatusLine(message)
+            if (typeof current === 'number') setRecognizeDone(current)
+            if (typeof total === 'number') setRecognizeTotal(total)
+            if (typeof matched === 'number') setMatchCount(matched)
+            if (reused) setCollectionReused(true)
+            if (isAsync) setAsyncMode(true)
+            if (leaveOk) setCanLeaveScreen(true)
+            if (typeof progressPercent === 'number') {
+              setProgress(62 + (progressPercent / 100) * 32)
+            }
           },
+          () => cancelled || abort.signal.aborted,
         )
 
+        let searchResult = resumed
+
+        if (!searchResult) {
+          searchResult = await runAlbumSearchPipeline(
+            referenceToken,
+            album,
+            albumUrl,
+            {
+              userId: userIdRef.current,
+              retry: retryCount > 0,
+              shouldAbort: () => cancelled || abort.signal.aborted,
+              onProgress: ({ phase: searchPhase, message, current, total, matched, collectionReused: reused, asyncMode: isAsync, canLeaveScreen: leaveOk, progressPercent }) => {
+                if (cancelled || abort.signal.aborted) return
+                setRecognizePhase(searchPhase)
+                setStatusLine(message)
+                if (typeof current === 'number') setRecognizeDone(current)
+                if (typeof total === 'number') setRecognizeTotal(total)
+                if (typeof matched === 'number') setMatchCount(matched)
+                if (reused) setCollectionReused(true)
+                if (isAsync) setAsyncMode(true)
+                if (leaveOk) setCanLeaveScreen(true)
+
+                let pct = 62
+                if (searchPhase === 'checking') {
+                  pct = 62 + 8
+                } else if (searchPhase === 'indexing' && total && total > 0 && typeof current === 'number') {
+                  pct = 70 + (current / total) * 22
+                } else if (typeof progressPercent === 'number') {
+                  pct = 62 + (progressPercent / 100) * 32
+                } else if (searchPhase === 'searching') {
+                  pct = 94
+                }
+                setProgress(pct)
+              },
+            },
+          )
+        }
+
         if (cancelled || abort.signal.aborted) return
 
-        if (!compareResult.ok) {
-          setLocalError(compareResult.message)
+        if (!searchResult.ok) {
+          setLocalError(searchResult.message)
+          setCanRetry(searchResult.canRetry ?? false)
           setPhase('error')
           markProcessingFailed(processingKey)
           return
         }
 
-        setMatchCount(compareResult.result.matchedImageIds.length)
+        if (searchResult.result.largeAlbumWarning) {
+          setLargeAlbumWarning(searchResult.result.largeAlbumWarning)
+        }
+
+        setMatchCount(searchResult.result.matchedImageIds.length)
+        setRecognizeDone(searchResult.result.analyzedCount)
+        setRecognizeTotal(searchResult.result.analyzedCount)
         setProgress(100)
         setPhase('ready')
         setStatusLine('Preparando resultados...')
         markProcessingComplete(processingKey)
-        setTimeout(() => onCompleteRef.current(compareResult.result), 400)
+        setTimeout(() => onCompleteRef.current(searchResult.result), 400)
       } catch (err) {
         if (cancelled || abort.signal.aborted) return
         const message = err instanceof Error ? err.message : String(err)
@@ -272,7 +348,7 @@ function AlbumProcessingScreen({
         intervalRef.current = null
       }
     }
-  }, [albumUrl, referenceToken])
+  }, [albumUrl, referenceToken, retryCount])
 
   if (phase === 'error') {
     const friendly = PROVIDER_FETCH_ERROR[provider]
@@ -291,23 +367,40 @@ function AlbumProcessingScreen({
             <h2 className="font-display text-2xl font-bold mb-2">No pudimos completar el análisis</h2>
             <ErrorBanner message={friendly} className="mb-3 text-left" />
             {technical && (
-              <p className={`text-left text-xs font-mono mb-6 ${import.meta.env.DEV ? 'text-amber-200/80' : 'text-text-muted'}`}>
-                {import.meta.env.DEV ? technical : getDriveErrorMessage(error ?? { code: 'UNKNOWN_ERROR', message: technical })}
+              <p className={`text-left text-xs font-mono mb-4 ${import.meta.env.DEV ? 'text-amber-200/80' : 'text-text-muted'}`}>
+                {import.meta.env.DEV ? technical : (localError ?? getDriveErrorMessage(error ?? { code: 'UNKNOWN_ERROR', message: technical }))}
               </p>
             )}
             {!technical && error && (
-              <p className="text-sm text-text-muted mb-6 text-left">{getDriveErrorMessage(error)}</p>
+              <p className="text-sm text-text-muted mb-4 text-left">{getDriveErrorMessage(error)}</p>
             )}
-            <Button variant="primary" className="w-full" onClick={onError}>
-              Volver al inicio
-            </Button>
+            <div className="flex flex-col gap-3">
+              {canRetry && (
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={() => {
+                    resetProcessingKey(processingKey)
+                    setRetryCount((c) => c + 1)
+                    setPhase('fetching')
+                    setCanRetry(false)
+                    setLocalError(null)
+                  }}
+                >
+                  Reintentar análisis
+                </Button>
+              )}
+              <Button variant={canRetry ? 'outline' : 'primary'} className="w-full" onClick={onError}>
+                Volver al inicio
+              </Button>
+            </div>
           </div>
         </div>
       </motion.div>
     )
   }
 
-  const isLargeAlbum = imageCount > 50
+  const isLargeAlbum = imageCount >= ASYNC_JOB_MIN_PHOTOS
 
   return (
     <motion.div
@@ -324,7 +417,7 @@ function AlbumProcessingScreen({
             transition={{ duration: 2, repeat: phase !== 'ready' ? Infinity : 0, ease: 'linear' }}
             className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-accent/20 to-violet/20 border border-accent/30 flex items-center justify-center glow-blue"
           >
-            {phase === 'comparing' ? (
+            {phase === 'recognizing' ? (
               <ScanFace className="w-10 h-10 text-accent-bright" />
             ) : phase !== 'ready' ? (
               <Loader2 className="w-10 h-10 text-accent-bright" />
@@ -339,8 +432,14 @@ function AlbumProcessingScreen({
           </Badge>
 
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-3">
-            {phase === 'comparing'
-              ? 'Buscando coincidencias...'
+            {phase === 'recognizing'
+              ? recognizePhase === 'indexing'
+                ? 'Indexando caras del álbum...'
+                : recognizePhase === 'searching'
+                  ? 'Buscando coincidencias...'
+                  : collectionReused
+                    ? 'Usando análisis previo...'
+                    : 'Analizando álbum...'
               : phase === 'preloading'
                 ? 'Preparando galería...'
                 : imageCount > 0
@@ -350,8 +449,14 @@ function AlbumProcessingScreen({
 
           <p className="text-text-muted">{statusLine}</p>
 
-          {trialWarning && (
-            <p className="text-sm text-amber-300/90 mt-3 max-w-md mx-auto">{trialWarning}</p>
+          {largeAlbumWarning && (
+            <p className="text-sm text-amber-300/90 mt-3 max-w-md mx-auto">{largeAlbumWarning}</p>
+          )}
+
+          {canLeaveScreen && asyncMode && phase === 'recognizing' && (
+            <p className="text-sm text-text-muted mt-3 max-w-md mx-auto">
+              Podés dejar esta pantalla abierta o volver más tarde. El análisis continúa en segundo plano mientras esta pestaña esté activa.
+            </p>
           )}
 
           {phase === 'preloading' && preloadTotal > 0 && (
@@ -363,16 +468,22 @@ function AlbumProcessingScreen({
             </p>
           )}
 
-          {phase === 'comparing' && compareTotal > 0 && (
+          {phase === 'recognizing' && recognizeTotal > 0 && (
             <p className="text-sm text-accent-bright mt-4 font-mono">
-              Comparando fotos {compareDone}/{compareTotal}
-              {matchCount > 0 && (
+              {recognizePhase === 'indexing' && (
+                <>Indexando caras {recognizeDone}/{recognizeTotal}</>
+              )}
+              {recognizePhase === 'searching' && 'Buscando coincidencias'}
+              {recognizePhase === 'checking' && (
+                collectionReused ? 'Usando análisis previo del álbum' : 'Revisando colección'
+              )}
+              {matchCount > 0 && recognizePhase === 'searching' && (
                 <span className="text-emerald-400"> · {matchCount} coincidencia{matchCount !== 1 ? 's' : ''}</span>
               )}
             </p>
           )}
 
-          {isLargeAlbum && phase !== 'comparing' && (
+          {isLargeAlbum && phase !== 'recognizing' && (
             <p className="text-sm text-text-dim mt-2 max-w-md mx-auto">
               Este álbum tiene muchas fotos. El análisis puede tardar varios minutos.
             </p>
@@ -401,12 +512,16 @@ function AlbumProcessingScreen({
               <div className="flex items-center gap-2 mb-2">
                 <ScanFace className="w-4 h-4 text-violet-soft" />
                 <span className="text-xs text-text-muted">
-                  {phase === 'comparing' ? 'Comparadas' : 'Cargadas'}
+                  {phase === 'recognizing'
+                    ? recognizePhase === 'indexing'
+                      ? 'Indexadas'
+                      : 'Analizadas'
+                    : 'Cargadas'}
                 </span>
               </div>
               <p className="font-display text-2xl font-bold text-violet-soft">
-                {phase === 'comparing'
-                  ? compareDone.toLocaleString()
+                {phase === 'recognizing'
+                  ? recognizeDone.toLocaleString()
                   : preloadLoaded.toLocaleString()}
               </p>
             </div>
@@ -435,7 +550,7 @@ function AlbumProcessingScreen({
           )}
         </div>
 
-        {(phase === 'preloading' || phase === 'comparing') && (
+        {(phase === 'preloading' || phase === 'recognizing') && (
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={handleCancel}>
               <X className="w-4 h-4" />
