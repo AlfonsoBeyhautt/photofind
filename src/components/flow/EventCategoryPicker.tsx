@@ -1,4 +1,4 @@
-import { EVENT_CATEGORIES, type EventCategory } from '../../data/eventCategories'
+import { EVENT_CATEGORIES, type EventCategory } from '../../lib/eventCategories'
 import { cn } from '../../lib/utils'
 
 interface EventCategoryPickerProps {

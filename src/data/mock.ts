@@ -1,4 +1,4 @@
-import { EVENT_CATEGORIES, eventCategoryLabel, type EventCategory, type EventCategoryInfo } from './eventCategories'
+import { EVENT_CATEGORIES, eventCategoryLabel, type EventCategory, type EventCategoryInfo } from '../lib/eventCategories'
 
 export type { EventCategory, EventCategoryInfo }
 export { EVENT_CATEGORIES, eventCategoryLabel }

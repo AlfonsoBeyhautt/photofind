@@ -13,7 +13,7 @@ import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { recordSearch } from '../lib/auth/authClient'
 import { resetAllProcessingRuns } from '../lib/processing/processingRunGuard'
-import type { EventCategory } from '../data/eventCategories'
+import type { EventCategory } from '../lib/eventCategories'
 
 import type { ResumeAlbumJobState } from '../lib/recognition/activeAlbumJobs'
 import type { RecognitionSearchResult } from '../types/recognition'

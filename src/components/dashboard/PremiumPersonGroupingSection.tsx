@@ -6,7 +6,7 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { fetchPersonGroupingStatus } from '../../lib/recognition/personGroupingClient'
 import { providerLabel } from '../../lib/auth/authClient'
-import { eventCategoryLabel } from '../../data/eventCategories'
+import { eventCategoryLabel } from '../../lib/eventCategories'
 import type { ProcessedAlbumItem } from '../../types/auth'
 import type { PersonGroupingReadStatus } from '../../types/personGrouping'
 

@@ -10,7 +10,7 @@ import { detectProviderFromUrl } from '../../lib/providers/detectProvider'
 import { PROVIDERS, type AlbumProvider } from '../../types/provider'
 import { isPersonGroupingEnabled } from '../../types/personGrouping'
 import { EventCategoryPicker } from './EventCategoryPicker'
-import type { EventCategory } from '../../data/eventCategories'
+import type { EventCategory } from '../../lib/eventCategories'
 import { cn } from '../../lib/utils'
 
 export type AlbumFlowMode = 'search' | 'group'

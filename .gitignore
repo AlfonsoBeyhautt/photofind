@@ -11,7 +11,7 @@ node_modules
 dist
 dist-ssr
 api/bundle/app.js
-data
+/data
 *.local
 .env
 

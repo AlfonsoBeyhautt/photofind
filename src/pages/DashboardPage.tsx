@@ -30,7 +30,7 @@ import {
 } from '../lib/recognition/activeAlbumJobs'
 import { clearActiveAlbumJob, pollAlbumJobStatus } from '../lib/recognition/albumJobClient'
 import type { ProcessedAlbumItem, SearchHistoryItem } from '../types/auth'
-import { eventCategoryLabel } from '../data/eventCategories'
+import { eventCategoryLabel } from '../lib/eventCategories'
 import { isPersonGroupingEnabled } from '../types/personGrouping'
 
 export function DashboardPage() {

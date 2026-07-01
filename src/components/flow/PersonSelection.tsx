@@ -11,7 +11,7 @@ import { ReferenceCamera } from '../recognition/ReferenceCamera'
 import { FacialProfileSetup } from '../account/FacialProfileSetup'
 import { FacialProfileGuestPrompt, facialProfilePrivacyText } from '../account/FacialProfileSection'
 import { getAuthErrorMessage, useFacialProfile } from '../../lib/auth/authClient'
-import type { EventCategory } from '../../data/eventCategories'
+import type { EventCategory } from '../../lib/eventCategories'
 import type { FaceBox, ValidateReferenceSuccess } from '../../types/recognition'
 import { cn } from '../../lib/utils'
 
