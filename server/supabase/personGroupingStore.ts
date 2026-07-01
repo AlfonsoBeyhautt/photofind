@@ -429,6 +429,30 @@ export async function insertPersonGroups(
   return inserted
 }
 
+export async function listPersonGroupFaceMembers(
+  groupingId: string,
+): Promise<{ groupId: string; faceId: string; imageId: string; similarity: number | null }[]> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return []
+
+  const { data, error } = await admin.client
+    .from('album_person_group_faces')
+    .select('group_id, face_id, image_id, similarity')
+    .eq('grouping_id', groupingId)
+
+  if (error) {
+    console.error('[PhotoFind:PersonGroups] list_group_faces', error.message)
+    return []
+  }
+
+  return (data ?? []).map((row) => ({
+    groupId: row.group_id as string,
+    faceId: row.face_id as string,
+    imageId: row.image_id as string,
+    similarity: row.similarity as number | null,
+  }))
+}
+
 export async function listVisiblePersonGroups(
   groupingId: string,
 ): Promise<PersonGroupRow[]> {

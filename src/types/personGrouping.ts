@@ -1,5 +1,15 @@
 export type PersonGroupingJobStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'stale'
 
+export interface PersonGroupAvatarCandidate {
+  imageId: string
+  representativeCrop: {
+    Width?: number
+    Height?: number
+    Left?: number
+    Top?: number
+  } | null
+}
+
 export interface PersonGroupPublic {
   groupId: string
   personLabel: string
@@ -12,6 +22,7 @@ export interface PersonGroupPublic {
     Left?: number
     Top?: number
   } | null
+  avatarCandidates?: PersonGroupAvatarCandidate[]
 }
 
 export interface PersonGroupingStatusPayload {

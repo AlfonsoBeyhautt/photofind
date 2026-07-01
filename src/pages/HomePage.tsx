@@ -53,7 +53,7 @@ export function HomePage() {
     navigate(location.pathname, { replace: true, state: null })
   }, [location.state, location.pathname, navigate, setAlbumUrl])
 
-  const handleAnalyze = useCallback((url: string, mode: AlbumFlowMode = 'search', category?: EventCategory | null) => {
+  const handleAnalyze = useCallback((url: string, mode: AlbumFlowMode = 'search') => {
     setAlbumUrl(url)
     setSearchResult(null)
     setInitialRetry(false)
@@ -62,7 +62,7 @@ export function HomePage() {
       setFlowData({
         albumUrl: url,
         method: 'upload',
-        category: category ?? null,
+        category: null,
         referenceToken: '',
         faceBox: { left: 0, top: 0, width: 0, height: 0 },
         flowMode: 'group',
@@ -74,7 +74,7 @@ export function HomePage() {
     setFlowData({
       albumUrl: url,
       method: 'upload',
-      category: category ?? null,
+      category: null,
       referenceToken: '',
       faceBox: { left: 0, top: 0, width: 0, height: 0 },
       flowMode: 'search',
@@ -140,6 +140,7 @@ export function HomePage() {
           {step === 'person' && (
             <PersonSelection
               key="person"
+              initialCategory={flowData?.category ?? null}
               onContinue={handlePersonContinue}
               onBack={() => { setStep('hero'); setFlowData(null) }}
             />

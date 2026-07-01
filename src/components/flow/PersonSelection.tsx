@@ -11,6 +11,7 @@ import { ReferenceCamera } from '../recognition/ReferenceCamera'
 import { FacialProfileSetup } from '../account/FacialProfileSetup'
 import { FacialProfileGuestPrompt, facialProfilePrivacyText } from '../account/FacialProfileSection'
 import { getAuthErrorMessage, useFacialProfile } from '../../lib/auth/authClient'
+import { EventCategoryPicker } from './EventCategoryPicker'
 import type { EventCategory } from '../../lib/eventCategories'
 import type { FaceBox, ValidateReferenceSuccess } from '../../types/recognition'
 import { cn } from '../../lib/utils'
@@ -28,13 +29,15 @@ export interface PersonContinueData {
 }
 
 interface PersonSelectionProps {
+  initialCategory?: EventCategory | null
   onContinue: (data: PersonContinueData) => void
   onBack: () => void
 }
 
-export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
+export function PersonSelection({ initialCategory = null, onContinue, onBack }: PersonSelectionProps) {
   const { isLoggedIn, user, facialProfile, setFacialProfile } = useAuth()
   const [method, setMethod] = useState<PersonMethod | null>(null)
+  const [category, setCategory] = useState<EventCategory | null>(initialCategory)
   const [referenceToken, setReferenceToken] = useState<string | null>(null)
   const [faceBox, setFaceBox] = useState<FaceBox | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -243,6 +246,10 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
         )}
       </div>
 
+      <div className="mb-8">
+        <EventCategoryPicker value={category} onChange={setCategory} className="mx-0" />
+      </div>
+
       <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 mt-8 border-t border-border-subtle bg-bg/95 backdrop-blur-md safe-bottom">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 max-w-5xl mx-auto">
         {referenceToken && (
@@ -263,6 +270,7 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
             if (!canContinue || !method || !referenceToken || !faceBox) return
             onContinue({
               method,
+              category: category ?? null,
               referenceToken,
               faceBox,
               qualityTier: qualityTier ?? undefined,

@@ -1,7 +1,8 @@
 import type { BoundingBox } from '@aws-sdk/client-rekognition'
 import {
   awsBoundingBoxToFaceBox,
-  isUsablePortraitCrop,
+  hasMinimumFaceBox,
+  scoreFaceForAvatar,
 } from './facePortraitCrop'
 import {
   PERSON_GROUPING_ALGORITHM_VERSION,
@@ -25,6 +26,7 @@ import {
   insertPersonGroups,
   isPersonGroupingStoreAvailable,
   listIndexedFacesForGrouping,
+  listPersonGroupFaceMembers,
   listPersonGroupImageIds,
   listVisiblePersonGroups,
   type ClusterState,
@@ -82,30 +84,57 @@ function faceQualityScore(face: IndexedFaceForGrouping): number {
   return conf * Math.max(bboxArea(face.bounding_box), 0.001)
 }
 
+function rankFacesForAvatar(
+  faces: ClusterStateFace[],
+  bboxByFace: Map<string, BoundingBox | null | undefined>,
+  confidenceByFace: Map<string, number | null | undefined>,
+  limit = 12,
+): { imageId: string; faceId: string; crop: BoundingBox | null; score: number }[] {
+  const ranked = faces
+    .map((face) => {
+      const bbox = bboxByFace.get(face.faceId)
+      const box = awsBoundingBoxToFaceBox(bbox)
+      const confidence = confidenceByFace.get(face.faceId) ?? face.confidence ?? 50
+      const score = box && hasMinimumFaceBox(box)
+        ? scoreFaceForAvatar(box, confidence)
+        : (face.confidence ?? 0) * Math.max(face.bboxArea, 0.001) * 0.5
+      return {
+        imageId: face.imageId,
+        faceId: face.faceId,
+        crop: bbox ?? null,
+        score,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  const seen = new Set<string>()
+  const unique: typeof ranked = []
+  for (const item of ranked) {
+    const key = `${item.imageId}:${item.faceId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(item)
+    if (unique.length >= limit) break
+  }
+  return unique
+}
+
 function pickBestRepresentativeFace(
   faces: ClusterStateFace[],
   bboxByFace: Map<string, BoundingBox | null | undefined>,
+  confidenceByFace: Map<string, number | null | undefined>,
 ): { imageId: string; faceId: string; crop: BoundingBox | null } {
-  const sorted = [...faces].sort((a, b) => {
-    const sa = (a.confidence ?? 0) * Math.max(a.bboxArea, 0.001)
-    const sb = (b.confidence ?? 0) * Math.max(b.bboxArea, 0.001)
-    return sb - sa
-  })
-
-  for (const face of sorted) {
-    const bbox = bboxByFace.get(face.faceId)
-    const box = awsBoundingBoxToFaceBox(bbox)
-    if (box && isUsablePortraitCrop(box)) {
-      return { imageId: face.imageId, faceId: face.faceId, crop: bbox ?? null }
+  const ranked = rankFacesForAvatar(faces, bboxByFace, confidenceByFace)
+  if (ranked.length === 0) {
+    const fallback = faces[0]
+    return {
+      imageId: fallback?.imageId ?? '',
+      faceId: fallback?.faceId ?? '',
+      crop: bboxByFace.get(fallback?.faceId ?? '') ?? null,
     }
   }
-
-  const fallback = sorted[0]
-  return {
-    imageId: fallback.imageId,
-    faceId: fallback.faceId,
-    crop: bboxByFace.get(fallback.faceId) ?? null,
-  }
+  const best = ranked[0]
+  return { imageId: best.imageId, faceId: best.faceId, crop: best.crop }
 }
 
 function buildClusterState(faces: IndexedFaceForGrouping[]): ClusterState {
@@ -221,6 +250,11 @@ async function ensureAccessGrant(
   }
 }
 
+export interface PersonGroupAvatarCandidate {
+  imageId: string
+  representativeCrop: BoundingBox | null
+}
+
 export interface PersonGroupPublic {
   groupId: string
   personLabel: string
@@ -228,6 +262,7 @@ export interface PersonGroupPublic {
   rank: number
   representativeImageId: string
   representativeCrop: BoundingBox | null
+  avatarCandidates?: PersonGroupAvatarCandidate[]
 }
 
 export interface PersonGroupingStatusPayload {
@@ -267,7 +302,10 @@ function progressPercent(row: PersonGroupingRow, state: ClusterState | null): nu
   return Math.min(99, Math.round((state.nextSeedIndex / totalSeeds) * 100))
 }
 
-function toPublicGroups(groups: PersonGroupRow[]): PersonGroupPublic[] {
+function toPublicGroups(
+  groups: PersonGroupRow[],
+  avatarCandidatesByGroup?: Map<string, PersonGroupAvatarCandidate[]>,
+): PersonGroupPublic[] {
   return groups.map((g) => ({
     groupId: g.id,
     personLabel: `Persona ${g.person_index}`,
@@ -275,7 +313,78 @@ function toPublicGroups(groups: PersonGroupRow[]): PersonGroupPublic[] {
     rank: g.person_index,
     representativeImageId: g.representative_image_id,
     representativeCrop: g.representative_crop,
+    avatarCandidates: avatarCandidatesByGroup?.get(g.id),
   }))
+}
+
+async function buildAvatarCandidatesByGroup(
+  groupingId: string,
+  albumCollectionId: string,
+  groups: PersonGroupRow[],
+): Promise<Map<string, PersonGroupAvatarCandidate[]>> {
+  const members = await listPersonGroupFaceMembers(groupingId)
+  if (members.length === 0) return new Map()
+
+  const indexedFaces = await listIndexedFacesForGrouping(albumCollectionId)
+  const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
+  const confidenceByFace = new Map(indexedFaces.map((f) => [f.face_id, f.confidence]))
+
+  const facesByGroup = new Map<string, ClusterStateFace[]>()
+  for (const member of members) {
+    const bbox = bboxByFace.get(member.faceId)
+    const list = facesByGroup.get(member.groupId) ?? []
+    list.push({
+      faceId: member.faceId,
+      imageId: member.imageId,
+      imageName: member.imageId,
+      confidence: member.similarity ?? confidenceByFace.get(member.faceId) ?? null,
+      bboxArea: bbox?.Width && bbox?.Height ? bbox.Width * bbox.Height : 0.01,
+      parent: member.faceId,
+    })
+    facesByGroup.set(member.groupId, list)
+  }
+
+  const result = new Map<string, PersonGroupAvatarCandidate[]>()
+  for (const group of groups) {
+    const faces = facesByGroup.get(group.id) ?? []
+    if (faces.length === 0) {
+      result.set(group.id, [{
+        imageId: group.representative_image_id,
+        representativeCrop: group.representative_crop,
+      }])
+      continue
+    }
+    const ranked = rankFacesForAvatar(faces, bboxByFace, confidenceByFace, 12)
+    result.set(
+      group.id,
+      ranked.map((item) => ({
+        imageId: item.imageId,
+        representativeCrop: item.crop,
+      })),
+    )
+  }
+  return result
+}
+
+async function toPublicGroupsWithAvatars(
+  groups: PersonGroupRow[],
+  groupingId: string,
+  albumCollectionId: string,
+): Promise<PersonGroupPublic[]> {
+  const candidates = await buildAvatarCandidatesByGroup(groupingId, albumCollectionId, groups)
+  return toPublicGroups(groups, candidates)
+}
+
+async function enrichStatusWithGroups(
+  row: PersonGroupingRow,
+  collection: AlbumCollectionRow,
+): Promise<PersonGroupingStatusPayload> {
+  const groups = await listVisiblePersonGroups(row.id)
+  const publicGroups = await toPublicGroupsWithAvatars(groups, row.id, collection.id)
+  return {
+    ...toStatusPayload(row),
+    groups: publicGroups,
+  }
 }
 
 function toStatusPayload(
@@ -313,6 +422,7 @@ async function finalizeGrouping(
   const minPhotos = row.min_photos_threshold ?? PERSON_GROUPING_MIN_PHOTOS
   const indexedFaces = await listIndexedFacesForGrouping(collection.id)
   const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
+  const confidenceByFace = new Map(indexedFaces.map((f) => [f.face_id, f.confidence]))
 
   const rawGroups = [...components.values()]
     .map((faces) => {
@@ -322,7 +432,7 @@ async function finalizeGrouping(
         const prev = imageMap.get(face.imageId) ?? 0
         if (sim > prev) imageMap.set(face.imageId, sim)
       }
-      const rep = pickBestRepresentativeFace(faces, bboxByFace)
+      const rep = pickBestRepresentativeFace(faces, bboxByFace, confidenceByFace)
       const repCluster = faces.find((f) => f.faceId === rep.faceId)
       return {
         faces,
@@ -481,10 +591,9 @@ export async function ensurePersonGrouping(input: {
   }
 
   if (grouping?.status === 'ready') {
-    const groups = await listVisiblePersonGroups(grouping.id)
     return {
       ok: true,
-      status: toStatusPayload(grouping, groups),
+      status: await enrichStatusWithGroups(grouping, collection),
       needsProcessing: false,
     }
   }
@@ -552,8 +661,7 @@ export async function processPersonGroupingBatch(input: {
   if (!grouping) return fail('PERSON_GROUPING_FAILED')
 
   if (grouping.status === 'ready') {
-    const groups = await listVisiblePersonGroups(grouping.id)
-    return { ok: true, status: toStatusPayload(grouping, groups), done: true }
+    return { ok: true, status: await enrichStatusWithGroups(grouping, collection), done: true }
   }
 
   if (grouping.status === 'failed') {
@@ -563,14 +671,18 @@ export async function processPersonGroupingBatch(input: {
   const updated = await processSearchBatch(grouping, collection)
   if (!updated) return fail('PERSON_GROUPING_FAILED')
 
-  const groups = updated.status === 'ready'
-    ? await listVisiblePersonGroups(updated.id)
-    : undefined
+  if (updated.status === 'ready') {
+    return {
+      ok: true,
+      status: await enrichStatusWithGroups(updated, collection),
+      done: true,
+    }
+  }
 
   return {
     ok: true,
-    status: toStatusPayload(updated, groups),
-    done: updated.status === 'ready',
+    status: toStatusPayload(updated),
+    done: false,
   }
 }
 
@@ -687,17 +799,10 @@ export async function listPersonGroupsForAlbum(input: {
     return { ok: true, groups: [], status: ensured.status }
   }
 
-  const collection = await resolveAlbumCollection(input.albumUrl, input.albumCollectionId)
-  if (!collection) return fail('RECOGNITION_COLLECTION_METADATA_ERROR')
-
-  const grouping = await findPersonGroupingByVersion(collection.id, PERSON_GROUPING_ALGORITHM_VERSION)
-  if (!grouping) return fail('PERSON_GROUPING_FAILED')
-
-  const groups = await listVisiblePersonGroups(grouping.id)
   return {
     ok: true,
-    groups: toPublicGroups(groups),
-    status: toStatusPayload(grouping, groups),
+    groups: ensured.status.groups ?? [],
+    status: ensured.status,
   }
 }
 
@@ -719,9 +824,10 @@ export async function getPersonGroupDetail(input: {
   }
 
   const imageIds = await listPersonGroupImageIds(group.id)
+  const [publicGroup] = await toPublicGroupsWithAvatars([group], group.grouping_id, group.album_collection_id)
   return {
     ok: true,
-    group: toPublicGroups([group])[0],
+    group: publicGroup,
     imageIds,
   }
 }

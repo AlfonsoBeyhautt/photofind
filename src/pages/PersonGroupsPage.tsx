@@ -335,7 +335,10 @@ function PersonGroupCard({
   onOpen: () => void
 }) {
   const repImage = albumImages.find((img) => img.id === group.representativeImageId)
-  const faceBox = representativeCropToFaceBox(group.representativeCrop)
+  const avatarCandidates = (group.avatarCandidates ?? []).map((candidate) => ({
+    image: albumImages.find((img) => img.id === candidate.imageId),
+    crop: candidate.representativeCrop,
+  }))
 
   return (
     <motion.button
@@ -349,7 +352,12 @@ function PersonGroupCard({
         'hover:bg-violet/5 transition-all flex items-center gap-4',
       )}
     >
-      <PersonFaceAvatar image={repImage} faceBox={faceBox} size={64} />
+      <PersonFaceAvatar
+        image={repImage}
+        faceBox={representativeCropToFaceBox(group.representativeCrop)}
+        candidates={avatarCandidates}
+        size={64}
+      />
       <div className="flex-1 min-w-0">
         <p className="font-semibold">{group.personLabel}</p>
         <p className="text-sm text-text-muted">{group.photoCount.toLocaleString()} fotos</p>

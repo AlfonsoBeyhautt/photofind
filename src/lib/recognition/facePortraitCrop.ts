@@ -8,7 +8,6 @@ export interface PortraitCropRegion {
 }
 
 export interface PortraitCropOptions {
-  /** Target share of the crop square occupied by the face (0.7–0.8). */
   faceFillRatio?: number
   marginX?: number
   marginTop?: number
@@ -17,9 +16,9 @@ export interface PortraitCropOptions {
 
 const DEFAULT_OPTIONS: Required<PortraitCropOptions> = {
   faceFillRatio: 0.75,
-  marginX: 0.55,
-  marginTop: 0.7,
-  marginBottom: 0.55,
+  marginX: 0.5,
+  marginTop: 0.65,
+  marginBottom: 0.5,
 }
 
 export function awsBoundingBoxToFaceBox(
@@ -43,78 +42,90 @@ export function awsBoundingBoxToFaceBox(
   }
 }
 
-/** Rejects boxes outside the image or with implausible geometry. */
-export function isValidFaceBoundingBox(box: FaceBox): boolean {
-  if (box.width <= 0 || box.height <= 0) return false
-  if (box.left < -0.01 || box.top < -0.01) return false
-  if (box.left + box.width > 1.01 || box.top + box.height > 1.01) return false
-  if (box.width < 0.012 || box.height < 0.012) return false
-  if (box.width > 0.92 || box.height > 0.92) return false
-  const aspect = box.width / box.height
-  return aspect >= 0.35 && aspect <= 2.4
+/** Minimal sanity check — permissive so we can still attempt a crop. */
+export function hasMinimumFaceBox(box: FaceBox | null | undefined): box is FaceBox {
+  if (!box || box.width <= 0 || box.height <= 0) return false
+  if (box.width > 0.98 || box.height > 0.98) return false
+  return box.left + box.width > 0.01 && box.top + box.height > 0.01
 }
 
-function containsFace(crop: PortraitCropRegion, box: FaceBox, padX: number, padTop: number, padBottom: number): boolean {
-  const minLeft = box.left - box.width * padX
-  const minTop = box.top - box.height * padTop
-  const maxRight = box.left + box.width + box.width * padX
-  const maxBottom = box.top + box.height + box.height * padBottom
-  return (
-    crop.left <= minLeft + 0.002
-    && crop.top <= minTop + 0.002
-    && crop.left + crop.width >= maxRight - 0.002
-    && crop.top + crop.height >= maxBottom - 0.002
-  )
+export function clampFaceBox(box: FaceBox): FaceBox {
+  let { left, top, width, height } = box
+  if (left < 0) {
+    width += left
+    left = 0
+  }
+  if (top < 0) {
+    height += top
+    top = 0
+  }
+  if (left + width > 1) width = 1 - left
+  if (top + height > 1) height = 1 - top
+  return {
+    left: Math.max(0, left),
+    top: Math.max(0, top),
+    width: Math.max(0.01, Math.min(width, 1)),
+    height: Math.max(0.01, Math.min(height, 1)),
+  }
+}
+
+export function scoreFaceForAvatar(box: FaceBox, confidence = 50): number {
+  const clamped = clampFaceBox(box)
+  const area = clamped.width * clamped.height
+  const aspect = clamped.width / clamped.height
+  const frontal = 1 - Math.min(1, Math.abs(aspect - 0.82) / 0.55)
+  const cx = clamped.left + clamped.width / 2
+  const cy = clamped.top + clamped.height / 2
+  const centered = 1 - Math.min(1, Math.abs(cx - 0.5) * 1.2 + Math.abs(cy - 0.42) * 0.9)
+  const conf = Math.min(100, Math.max(0, confidence)) / 100
+  return area * 3.5 + conf * 0.35 + frontal * 0.25 + centered * 0.2
 }
 
 /**
- * Square portrait crop with generous margins so the full face stays visible
- * and occupies ~70–80% of the circle.
+ * Square portrait crop: face centered, ~70–80% of circle, generous forehead/chin margin.
  */
 export function facePortraitCrop(
   box: FaceBox,
   options?: PortraitCropOptions,
 ): PortraitCropRegion | null {
-  if (!isValidFaceBoundingBox(box)) return null
+  if (!hasMinimumFaceBox(box)) return null
 
+  const face = clampFaceBox(box)
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  const cx = box.left + box.width / 2
-  const cy = box.top + box.height / 2
-  const faceW = box.width
-  const faceH = box.height
+  const cx = face.left + face.width / 2
+  const cy = face.top + face.height / 2
+  const faceW = face.width
+  const faceH = face.height
 
-  const expW = faceW * (1 + opts.marginX * 2)
-  const expH = faceH * (1 + opts.marginTop + opts.marginBottom)
+  const padLeft = faceW * opts.marginX
+  const padRight = faceW * opts.marginX
+  const padTop = faceH * opts.marginTop
+  const padBottom = faceH * opts.marginBottom
+
+  const neededW = faceW + padLeft + padRight
+  const neededH = faceH + padTop + padBottom
   const faceMax = Math.max(faceW, faceH)
 
-  let size = Math.max(expW, expH, faceMax / opts.faceFillRatio)
+  let size = Math.max(neededW, neededH, faceMax / opts.faceFillRatio)
 
-  const verticalBias = faceH * (opts.marginTop - opts.marginBottom) * 0.12
+  const verticalBias = faceH * (opts.marginTop - opts.marginBottom) * 0.1
   let left = cx - size / 2
   let top = cy - size / 2 - verticalBias
-
-  const minLeft = box.left - faceW * opts.marginX
-  const minTop = box.top - faceH * opts.marginTop
-  const maxRight = box.left + faceW + faceW * opts.marginX
-  const maxBottom = box.top + faceH + faceH * opts.marginBottom
-  size = Math.max(size, maxRight - minLeft, maxBottom - minTop)
-
-  left = cx - size / 2
-  top = cy - size / 2 - verticalBias
 
   if (left < 0) left = 0
   if (top < 0) top = 0
   if (left + size > 1) left = Math.max(0, 1 - size)
   if (top + size > 1) top = Math.max(0, 1 - size)
 
-  if (size <= 0 || size > 1) return null
-
-  const region = { left, top, width: size, height: size }
-  if (!containsFace(region, box, opts.marginX, opts.marginTop, opts.marginBottom)) {
-    return null
+  if (size > 1) {
+    size = 1
+    left = 0
+    top = 0
   }
 
-  return region
+  if (size < 0.05) return null
+
+  return { left, top, width: size, height: size }
 }
 
 export function isUsablePortraitCrop(box: FaceBox, options?: PortraitCropOptions): boolean {

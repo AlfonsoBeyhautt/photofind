@@ -9,14 +9,12 @@ import { getDriveErrorMessage } from '../../lib/drive/errors'
 import { detectProviderFromUrl } from '../../lib/providers/detectProvider'
 import { PROVIDERS, type AlbumProvider } from '../../types/provider'
 import { isPersonGroupingEnabled } from '../../types/personGrouping'
-import { EventCategoryPicker } from './EventCategoryPicker'
-import type { EventCategory } from '../../lib/eventCategories'
 import { cn } from '../../lib/utils'
 
 export type AlbumFlowMode = 'search' | 'group'
 
 interface HeroSectionProps {
-  onAnalyze: (url: string, mode: AlbumFlowMode, eventCategory?: EventCategory | null) => void
+  onAnalyze: (url: string, mode: AlbumFlowMode) => void
 }
 
 const PROVIDER_ICONS: Record<AlbumProvider, LucideIcon> = {
@@ -53,7 +51,6 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
   const [focused, setFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [flowMode, setFlowMode] = useState<AlbumFlowMode>('search')
-  const [eventCategory, setEventCategory] = useState<EventCategory | null>(null)
   const premiumEnabled = isPersonGroupingEnabled()
 
   const detectedProvider = useMemo(() => detectProviderFromUrl(url), [url])
@@ -76,7 +73,7 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
       return
     }
     setError(null)
-    onAnalyze(url.trim(), flowMode, eventCategory)
+    onAnalyze(url.trim(), flowMode)
   }
 
   return (
@@ -159,9 +156,6 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
           <p className="text-xs text-text-dim mt-2 mx-4">
             No pudimos identificar el origen del enlace.
           </p>
-        )}
-        {hasUrl && !error && (
-          <EventCategoryPicker value={eventCategory} onChange={setEventCategory} />
         )}
         {premiumEnabled && hasUrl && !error && (
           <div className="mt-3 mx-1 p-3 rounded-xl bg-violet/5 border border-violet/15">

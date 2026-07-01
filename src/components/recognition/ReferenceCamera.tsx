@@ -222,7 +222,7 @@ export function ReferenceCamera({
           onError={onError}
         />
       ) : (
-      <div className="relative rounded-xl overflow-hidden aspect-[4/3] max-h-[min(70vw,320px)] sm:max-h-none bg-bg-elevated border border-border">
+      <div className="relative rounded-xl overflow-hidden aspect-[4/3] max-h-[min(88vw,480px)] sm:max-h-none bg-bg-elevated border border-border">
         {showLive ? (
           <>
             <video
@@ -237,8 +237,17 @@ export function ReferenceCamera({
               </div>
             )}
             {ready && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-24 h-24 rounded-full border-2 border-dashed border-accent/40" />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-4">
+                {/* Mobile: large vertical oval guide (Face ID style) */}
+                <div
+                  className="sm:hidden border-2 border-dashed border-accent/50 rounded-[48%] bg-accent/5"
+                  style={{
+                    width: 'min(78vw, 300px)',
+                    height: 'min(96vw, 380px)',
+                  }}
+                />
+                {/* Desktop: compact circle (unchanged) */}
+                <div className="hidden sm:block w-24 h-24 rounded-full border-2 border-dashed border-accent/40" />
               </div>
             )}
             <div className="absolute bottom-3 left-2 right-2 flex justify-center gap-2 safe-bottom">
