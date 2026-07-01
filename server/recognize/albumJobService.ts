@@ -144,6 +144,7 @@ export async function startAlbumProcessingJob(input: {
   sessionId?: string | null
   userId?: string | null
   retry?: boolean
+  eventCategory?: string | null
 }): Promise<AlbumJobStartResult> {
   if (!isAlbumJobStoreAvailable()) {
     return fail('RECOGNITION_COLLECTION_METADATA_ERROR')
@@ -155,6 +156,7 @@ export async function startAlbumProcessingJob(input: {
     folderName: input.folderName,
     albumUrl: input.albumUrl,
     images: input.images,
+    eventCategory: input.eventCategory,
   })
 
   if (!prepare.ok) {

@@ -49,7 +49,7 @@ export interface SearchHistoryItem {
   albumName: string
   albumUrl: string
   provider: string
-  eventCategory: string
+  eventCategory: string | null
   photosFound: number
   totalPhotos: number | null
   createdAt: string
@@ -62,6 +62,7 @@ export interface ProcessedAlbumItem {
   totalPhotos: number | null
   lastSearchedAt: string
   searchCount: number
+  eventCategory: string | null
 }
 
 function rowToItem(row: SearchHistoryRow): SearchHistoryItem {
@@ -70,7 +71,7 @@ function rowToItem(row: SearchHistoryRow): SearchHistoryItem {
     albumName: row.album_name,
     albumUrl: row.album_url,
     provider: row.provider,
-    eventCategory: row.event_category,
+    eventCategory: row.event_category || null,
     photosFound: row.photos_found,
     totalPhotos: row.total_photos,
     createdAt: row.created_at,
@@ -83,7 +84,7 @@ export async function recordSearch(
     albumName: string
     albumUrl: string
     provider: string
-    eventCategory: string
+    eventCategory?: string | null
     photosFound: number
     totalPhotos?: number | null
   },
@@ -96,7 +97,7 @@ export async function recordSearch(
       album_name: data.albumName,
       album_url: data.albumUrl,
       provider: data.provider,
-      event_category: data.eventCategory,
+      event_category: data.eventCategory?.trim() || null,
       photos_found: data.photosFound,
       total_photos: data.totalPhotos ?? null,
     })
@@ -147,12 +148,16 @@ export function buildProcessedAlbums(searches: SearchHistoryItem[]): ProcessedAl
         totalPhotos: search.totalPhotos,
         lastSearchedAt: search.createdAt,
         searchCount: 1,
+        eventCategory: search.eventCategory,
       })
       continue
     }
     existing.searchCount += 1
     if (search.totalPhotos != null) {
       existing.totalPhotos = search.totalPhotos
+    }
+    if (search.eventCategory && !existing.eventCategory) {
+      existing.eventCategory = search.eventCategory
     }
   }
 

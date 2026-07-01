@@ -84,6 +84,7 @@ async function startAlbumJob(
   albumUrl: string,
   userId?: string | null,
   retry = false,
+  eventCategory?: string | null,
 ): Promise<JobStartSuccess | JobStartFailure> {
   const res = await fetch('/api/recognize/album-job-start', {
     method: 'POST',
@@ -93,6 +94,7 @@ async function startAlbumJob(
       folderId: album.folderId,
       folderName: album.folderName,
       albumUrl,
+      eventCategory: eventCategory ?? undefined,
       images: album.images.map((img) => ({ id: img.id, name: img.name })),
       sessionId: getOrCreateSessionId(),
       userId: userId ?? undefined,
@@ -288,6 +290,7 @@ export async function runAlbumSearchPipeline(
   albumUrl: string,
   options?: {
     userId?: string | null
+    eventCategory?: string | null
     onProgress?: (update: AlbumJobProgressUpdate) => void
     shouldAbort?: () => boolean
     retry?: boolean
@@ -303,7 +306,7 @@ export async function runAlbumSearchPipeline(
 
   let start: JobStartSuccess | JobStartFailure
   try {
-    start = await startAlbumJob(album, albumUrl, options?.userId, options?.retry)
+    start = await startAlbumJob(album, albumUrl, options?.userId, options?.retry, options?.eventCategory)
   } catch {
     if (album.totalImages >= ASYNC_JOB_MIN_PHOTOS) {
       return { ok: false, message: 'No pudimos iniciar el análisis del álbum.', canRetry: true }
@@ -331,7 +334,7 @@ export async function runAlbumSearchPipeline(
   }
 
   if (start.mode === 'sync') {
-    return searchAlbumWithCollection(referenceToken, album, albumUrl, onProgress)
+    return searchAlbumWithCollection(referenceToken, album, albumUrl, onProgress, options?.eventCategory)
   }
 
   if (start.mode === 'collection_ready') {
@@ -516,6 +519,7 @@ export async function runAlbumIndexOnlyPipeline(
   albumUrl: string,
   options?: {
     userId?: string | null
+    eventCategory?: string | null
     onProgress?: (update: AlbumJobProgressUpdate) => void
     shouldAbort?: () => boolean
     retry?: boolean
@@ -531,17 +535,17 @@ export async function runAlbumIndexOnlyPipeline(
 
   let start: JobStartSuccess | JobStartFailure
   try {
-    start = await startAlbumJob(album, albumUrl, options?.userId, options?.retry)
+    start = await startAlbumJob(album, albumUrl, options?.userId, options?.retry, options?.eventCategory)
   } catch {
     if (album.totalImages >= ASYNC_JOB_MIN_PHOTOS) {
       return { ok: false, message: 'No pudimos iniciar el análisis del álbum.', canRetry: true }
     }
-    return indexAlbumWithCollection(album, albumUrl, onProgress)
+    return indexAlbumWithCollection(album, albumUrl, onProgress, options?.eventCategory)
   }
 
   if (!start.ok) {
     if (album.totalImages < ASYNC_JOB_MIN_PHOTOS) {
-      return indexAlbumWithCollection(album, albumUrl, onProgress)
+      return indexAlbumWithCollection(album, albumUrl, onProgress, options?.eventCategory)
     }
     return {
       ok: false,
@@ -562,7 +566,7 @@ export async function runAlbumIndexOnlyPipeline(
   }
 
   if (start.mode === 'sync') {
-    return indexAlbumWithCollection(album, albumUrl, onProgress)
+    return indexAlbumWithCollection(album, albumUrl, onProgress, options?.eventCategory)
   }
 
   if (start.mode === 'async' && start.jobId) {

@@ -1,7 +1,7 @@
 import { useState, useCallback, type ElementType } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, Camera, User, Check, Loader2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Upload, Camera, User, Loader2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../ui/Button'
 import { ErrorBanner } from '../ui/ErrorBanner'
@@ -11,7 +11,7 @@ import { ReferenceCamera } from '../recognition/ReferenceCamera'
 import { FacialProfileSetup } from '../account/FacialProfileSetup'
 import { FacialProfileGuestPrompt, facialProfilePrivacyText } from '../account/FacialProfileSection'
 import { getAuthErrorMessage, useFacialProfile } from '../../lib/auth/authClient'
-import { EVENT_CATEGORIES, type EventCategory } from '../../data/mock'
+import type { EventCategory } from '../../data/eventCategories'
 import type { FaceBox, ValidateReferenceSuccess } from '../../types/recognition'
 import { cn } from '../../lib/utils'
 
@@ -19,8 +19,8 @@ export type PersonMethod = 'upload' | 'selfie' | 'profile'
 
 export interface PersonContinueData {
   method: PersonMethod
-  category: EventCategory
-  extraInfo: Record<string, string>
+  category?: EventCategory | null
+  extraInfo?: Record<string, string>
   referenceToken: string
   faceBox: FaceBox
   qualityTier?: ValidateReferenceSuccess['qualityTier']
@@ -35,8 +35,6 @@ interface PersonSelectionProps {
 export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
   const { isLoggedIn, user, facialProfile, setFacialProfile } = useAuth()
   const [method, setMethod] = useState<PersonMethod | null>(null)
-  const [category, setCategory] = useState<EventCategory | null>(null)
-  const [extraInfo, setExtraInfo] = useState<Record<string, string>>({})
   const [referenceToken, setReferenceToken] = useState<string | null>(null)
   const [faceBox, setFaceBox] = useState<FaceBox | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -103,43 +101,7 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
     setQualityWarning(result.qualityWarning ?? null)
   }, [])
 
-  const canContinue = Boolean(method && category && referenceToken && faceBox)
-
-  const extraFields: Record<EventCategory, { key: string; label: string; placeholder: string }[]> = {
-    futbol: [
-      { key: 'numero', label: 'Número de camiseta', placeholder: 'Ej: 10' },
-      { key: 'color', label: 'Color de camiseta', placeholder: 'Ej: Azul y blanco' },
-      { key: 'equipo', label: 'Equipo', placeholder: 'Ej: Club Atlético' },
-    ],
-    fiesta: [
-      { key: 'colorRopa', label: 'Color de ropa', placeholder: 'Ej: Negro con dorado' },
-      { key: 'accesorios', label: 'Accesorios', placeholder: 'Ej: Anteojos, collar' },
-    ],
-    casamiento: [
-      { key: 'rol', label: 'Tu rol en el evento', placeholder: 'Ej: Invitado, padrino' },
-      { key: 'vestimenta', label: 'Vestimenta', placeholder: 'Ej: Traje azul marino' },
-    ],
-    cumpleanos: [
-      { key: 'colorRopa', label: 'Color de ropa', placeholder: 'Ej: Rojo' },
-      { key: 'accesorios', label: 'Accesorios distintivos', placeholder: 'Ej: Sombrero de fiesta' },
-    ],
-    graduacion: [
-      { key: 'toga', label: 'Color de toga/birrete', placeholder: 'Ej: Negro y dorado' },
-      { key: 'facultad', label: 'Facultad o carrera', placeholder: 'Ej: Ingeniería' },
-    ],
-    deportivo: [
-      { key: 'deporte', label: 'Deporte', placeholder: 'Ej: Tenis' },
-      { key: 'equipo', label: 'Equipo o categoría', placeholder: 'Ej: Sub-21' },
-    ],
-    viaje: [
-      { key: 'destino', label: 'Destino', placeholder: 'Ej: Bariloche' },
-      { key: 'vestimenta', label: 'Ropa típica del viaje', placeholder: 'Ej: Campera roja' },
-    ],
-    corporativo: [
-      { key: 'empresa', label: 'Empresa', placeholder: 'Ej: TechCorp' },
-      { key: 'vestimenta', label: 'Vestimenta', placeholder: 'Ej: Traje formal' },
-    ],
-  }
+  const canContinue = Boolean(method && referenceToken && faceBox)
 
   return (
     <motion.div
@@ -281,68 +243,6 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
         )}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
-      >
-        <h3 className="font-display font-semibold text-xl mb-4">Categoría del evento</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          {EVENT_CATEGORIES.map((cat) => (
-            <motion.button
-              key={cat.id}
-              type="button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => { setCategory(cat.id); setExtraInfo({}) }}
-              className={cn(
-                'relative p-4 min-h-[72px] rounded-xl border text-left transition-all',
-                category === cat.id
-                  ? 'border-accent bg-accent/10 shadow-lg shadow-accent/10'
-                  : 'border-border bg-surface/50 hover:border-border/80 hover:bg-surface',
-              )}
-            >
-              <span className="text-2xl mb-2 block">{cat.emoji}</span>
-              <span className="text-sm font-medium">{cat.label}</span>
-              {category === cat.id && (
-                <motion.div
-                  layoutId="category-check"
-                  className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent flex items-center justify-center"
-                >
-                  <Check className="w-3 h-3 text-white" />
-                </motion.div>
-              )}
-            </motion.button>
-          ))}
-        </div>
-      </motion.div>
-
-      <AnimatePresence>
-        {category && extraFields[category].length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mb-10 overflow-hidden"
-          >
-            <h3 className="font-display font-semibold text-xl mb-4">Información adicional</h3>
-            <div className="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {extraFields[category].map((field) => (
-                <div key={field.key}>
-                  <label className="block text-sm text-text-muted mb-1.5">{field.label}</label>
-                  <input
-                    value={extraInfo[field.key] || ''}
-                    onChange={(e) => setExtraInfo({ ...extraInfo, [field.key]: e.target.value })}
-                    placeholder={field.placeholder}
-                    className="w-full px-4 py-2.5 rounded-xl bg-bg-elevated border border-border text-sm focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all"
-                  />
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 mt-8 border-t border-border-subtle bg-bg/95 backdrop-blur-md safe-bottom">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 max-w-5xl mx-auto">
         {referenceToken && (
@@ -360,11 +260,9 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
           className="w-full sm:w-auto"
           disabled={!canContinue}
           onClick={() => {
-            if (!canContinue || !method || !category || !referenceToken || !faceBox) return
+            if (!canContinue || !method || !referenceToken || !faceBox) return
             onContinue({
               method,
-              category,
-              extraInfo,
               referenceToken,
               faceBox,
               qualityTier: qualityTier ?? undefined,

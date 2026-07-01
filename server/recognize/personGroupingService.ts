@@ -1,5 +1,9 @@
 import type { BoundingBox } from '@aws-sdk/client-rekognition'
 import {
+  awsBoundingBoxToFaceBox,
+  isUsablePortraitCrop,
+} from './facePortraitCrop'
+import {
   PERSON_GROUPING_ALGORITHM_VERSION,
   PERSON_GROUPING_MAX_FACE_MATCHES,
   PERSON_GROUPING_MIN_PHOTOS,
@@ -76,6 +80,32 @@ function bboxArea(box: BoundingBox | null): number {
 function faceQualityScore(face: IndexedFaceForGrouping): number {
   const conf = face.confidence ?? 50
   return conf * Math.max(bboxArea(face.bounding_box), 0.001)
+}
+
+function pickBestRepresentativeFace(
+  faces: ClusterStateFace[],
+  bboxByFace: Map<string, BoundingBox | null | undefined>,
+): { imageId: string; faceId: string; crop: BoundingBox | null } {
+  const sorted = [...faces].sort((a, b) => {
+    const sa = (a.confidence ?? 0) * Math.max(a.bboxArea, 0.001)
+    const sb = (b.confidence ?? 0) * Math.max(b.bboxArea, 0.001)
+    return sb - sa
+  })
+
+  for (const face of sorted) {
+    const bbox = bboxByFace.get(face.faceId)
+    const box = awsBoundingBoxToFaceBox(bbox)
+    if (box && isUsablePortraitCrop(box)) {
+      return { imageId: face.imageId, faceId: face.faceId, crop: bbox ?? null }
+    }
+  }
+
+  const fallback = sorted[0]
+  return {
+    imageId: fallback.imageId,
+    faceId: fallback.faceId,
+    crop: bboxByFace.get(fallback.faceId) ?? null,
+  }
 }
 
 function buildClusterState(faces: IndexedFaceForGrouping[]): ClusterState {
@@ -281,6 +311,9 @@ async function finalizeGrouping(
   }
 
   const minPhotos = row.min_photos_threshold ?? PERSON_GROUPING_MIN_PHOTOS
+  const indexedFaces = await listIndexedFacesForGrouping(collection.id)
+  const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
+
   const rawGroups = [...components.values()]
     .map((faces) => {
       const imageMap = new Map<string, number>()
@@ -289,17 +322,14 @@ async function finalizeGrouping(
         const prev = imageMap.get(face.imageId) ?? 0
         if (sim > prev) imageMap.set(face.imageId, sim)
       }
-      const rep = [...faces].sort((a, b) => {
-        const sa = (a.confidence ?? 0) * Math.max(a.bboxArea, 0.001)
-        const sb = (b.confidence ?? 0) * Math.max(b.bboxArea, 0.001)
-        return sb - sa
-      })[0]
+      const rep = pickBestRepresentativeFace(faces, bboxByFace)
+      const repCluster = faces.find((f) => f.faceId === rep.faceId)
       return {
         faces,
         imageMap,
         representative: rep,
         photoCount: imageMap.size,
-        qualityScore: (rep.confidence ?? 0) * Math.max(rep.bboxArea, 0.001),
+        qualityScore: (repCluster?.confidence ?? 0) * Math.max(repCluster?.bboxArea ?? 0.001, 0.001),
       }
     })
     .sort((a, b) => b.photoCount - a.photoCount)
@@ -314,7 +344,7 @@ async function finalizeGrouping(
       photoCount: g.photoCount,
       faceInstanceCount: g.faces.length,
       representativeImageId: repFace.imageId,
-      representativeCrop: null as BoundingBox | null,
+      representativeCrop: repFace.crop,
       qualityScore: g.qualityScore,
       isVisible,
       faces: g.faces.map((f) => ({
@@ -328,17 +358,6 @@ async function finalizeGrouping(
       })),
     }
   })
-
-  // Load bbox for representative from DB
-  const indexedFaces = await listIndexedFacesForGrouping(collection.id)
-  const bboxByFace = new Map(indexedFaces.map((f) => [f.face_id, f.bounding_box]))
-
-  for (const group of groupsToInsert) {
-    const repFaceId = rawGroups[group.personIndex - 1]?.representative.faceId
-    if (repFaceId) {
-      group.representativeCrop = bboxByFace.get(repFaceId) ?? null
-    }
-  }
 
   await insertPersonGroups(row.id, collection.id, groupsToInsert)
 

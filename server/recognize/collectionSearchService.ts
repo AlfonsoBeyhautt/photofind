@@ -31,6 +31,7 @@ import {
   saveIndexedFaces,
   saveNoFaceMarker,
   touchAlbumCollectionExpiry,
+  updateAlbumCollectionEventCategory,
   updateAlbumCollectionProgress,
   type AlbumCollectionRow,
 } from '../supabase/albumCollectionStore'
@@ -170,6 +171,7 @@ export async function prepareAlbumCollection(input: {
   folderName?: string
   albumUrl?: string
   images: Pick<AlbumImage, 'id' | 'name'>[]
+  eventCategory?: string | null
 }): Promise<PrepareCollectionResult> {
   if (!canUseRekognition()) {
     return fail('AWS_CREDENTIALS_MISSING')
@@ -183,6 +185,13 @@ export async function prepareAlbumCollection(input: {
   const collectionId = collectionIdForAlbum(input.source, input.folderId, albumFingerprint)
   const totalImages = input.images.length
   const warning = largeAlbumWarning(totalImages)
+  const eventCategory = input.eventCategory?.trim() || null
+
+  async function persistEventCategory(albumCollectionId: string): Promise<void> {
+    if (eventCategory) {
+      await updateAlbumCollectionEventCategory(albumCollectionId, eventCategory)
+    }
+  }
 
   const existing = await findAlbumCollectionByFingerprint(albumFingerprint)
   if (existing && existing.status === 'ready') {
@@ -191,6 +200,7 @@ export async function prepareAlbumCollection(input: {
 
     if (allIndexed) {
       await touchAlbumCollectionExpiry(existing.id)
+      await persistEventCategory(existing.id)
 
       console.log('[PhotoFind:Collections] reused', {
         collectionId,
@@ -243,12 +253,15 @@ export async function prepareAlbumCollection(input: {
       folderName: input.folderName,
       collectionId,
       totalImages,
+      eventCategory,
     })
   }
 
   if (!row) {
     return fail('RECOGNITION_COLLECTION_METADATA_ERROR')
   }
+
+  await persistEventCategory(row.id)
 
   const indexedIds = await getIndexedImageIds(row.id)
   const pendingImageIds = input.images

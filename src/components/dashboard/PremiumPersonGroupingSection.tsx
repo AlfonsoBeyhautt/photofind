@@ -6,6 +6,7 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { fetchPersonGroupingStatus } from '../../lib/recognition/personGroupingClient'
 import { providerLabel } from '../../lib/auth/authClient'
+import { eventCategoryLabel } from '../../data/eventCategories'
 import type { ProcessedAlbumItem } from '../../types/auth'
 import type { PersonGroupingReadStatus } from '../../types/personGrouping'
 
@@ -132,6 +133,14 @@ export function PremiumPersonGroupingSection({ albums }: PremiumPersonGroupingSe
                   <p className="font-medium truncate">{album.albumName}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-text-dim">
                     <span>{providerLabel(album.provider)}</span>
+                    {album.eventCategory && (
+                      <>
+                        <span>·</span>
+                        <Badge variant="default" className="text-[10px] py-0">
+                          {eventCategoryLabel(album.eventCategory)}
+                        </Badge>
+                      </>
+                    )}
                     {album.totalPhotos != null && (
                       <>
                         <span>·</span>

@@ -2,30 +2,15 @@ import { useMemo } from 'react'
 import { Users } from 'lucide-react'
 import type { AlbumImage } from '../../types/album'
 import type { FaceBox } from '../../types/recognition'
-import { faceThumbnailCrop } from '../../lib/recognition/faceBoxLayout'
+import {
+  awsBoundingBoxToFaceBox,
+  facePortraitCrop,
+  isUsablePortraitCrop,
+} from '../../lib/recognition/facePortraitCrop'
 import { getGalleryThumbnailUrl } from '../../lib/images/imageUrls'
 import { cn } from '../../lib/utils'
 
-export function representativeCropToFaceBox(
-  crop: { Width?: number; Height?: number; Left?: number; Top?: number } | null | undefined,
-): FaceBox | null {
-  if (
-    crop?.Left == null
-    || crop.Top == null
-    || crop.Width == null
-    || crop.Height == null
-    || crop.Width <= 0
-    || crop.Height <= 0
-  ) {
-    return null
-  }
-  return {
-    left: crop.Left,
-    top: crop.Top,
-    width: crop.Width,
-    height: crop.Height,
-  }
-}
+export { awsBoundingBoxToFaceBox as representativeCropToFaceBox }
 
 interface PersonFaceAvatarProps {
   image?: AlbumImage | null
@@ -41,7 +26,10 @@ export function PersonFaceAvatar({
   className,
 }: PersonFaceAvatarProps) {
   const thumbUrl = useMemo(() => (image ? getGalleryThumbnailUrl(image) : null), [image])
-  const crop = faceBox ? faceThumbnailCrop(faceBox) : null
+  const crop = useMemo(() => {
+    if (!faceBox || !isUsablePortraitCrop(faceBox)) return null
+    return facePortraitCrop(faceBox)
+  }, [faceBox])
 
   return (
     <div

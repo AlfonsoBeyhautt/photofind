@@ -1,30 +1,7 @@
-export type EventCategory =
-  | 'casamiento'
-  | 'fiesta'
-  | 'cumpleanos'
-  | 'graduacion'
-  | 'futbol'
-  | 'deportivo'
-  | 'viaje'
-  | 'corporativo'
+import { EVENT_CATEGORIES, eventCategoryLabel, type EventCategory, type EventCategoryInfo } from './eventCategories'
 
-export interface EventCategoryInfo {
-  id: EventCategory
-  label: string
-  icon: string
-  emoji: string
-}
-
-export const EVENT_CATEGORIES: EventCategoryInfo[] = [
-  { id: 'casamiento', label: 'Casamiento', icon: 'rings', emoji: '💍' },
-  { id: 'fiesta', label: 'Fiesta', icon: 'party', emoji: '🎉' },
-  { id: 'cumpleanos', label: 'Cumpleaños', icon: 'cake', emoji: '🎂' },
-  { id: 'graduacion', label: 'Graduación', icon: 'graduation', emoji: '🎓' },
-  { id: 'futbol', label: 'Partido de fútbol', icon: 'soccer', emoji: '⚽' },
-  { id: 'deportivo', label: 'Evento deportivo', icon: 'sport', emoji: '🏃' },
-  { id: 'viaje', label: 'Viaje', icon: 'travel', emoji: '✈️' },
-  { id: 'corporativo', label: 'Evento corporativo', icon: 'corporate', emoji: '💼' },
-]
+export type { EventCategory, EventCategoryInfo }
+export { EVENT_CATEGORIES, eventCategoryLabel }
 
 export interface DetectedPerson {
   id: string

@@ -9,6 +9,7 @@ import {
   listRecentSearches,
   recordSearch,
 } from '../supabase/searchHistoryStore'
+import { getEventCategoriesByUrlHashes, hashAlbumUrl } from '../supabase/albumCollectionStore'
 import { listResumableJobsForUser } from '../supabase/albumProcessingJobStore'
 import { cancelAlbumJobForUser } from '../recognize/albumJobService'
 
@@ -186,7 +187,7 @@ export async function handleRecordSearchRequest(
   const provider = body.provider?.trim()
   const eventCategory = body.eventCategory?.trim()
 
-  if (!albumName || !albumUrl || !provider || !eventCategory || typeof body.photosFound !== 'number') {
+  if (!albumName || !albumUrl || !provider || typeof body.photosFound !== 'number') {
     sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Faltan datos de la búsqueda.' } })
     return
   }
@@ -196,7 +197,7 @@ export async function handleRecordSearchRequest(
       albumName,
       albumUrl,
       provider,
-      eventCategory,
+      eventCategory: eventCategory || null,
       photosFound: body.photosFound,
       totalPhotos: body.totalPhotos,
     })
@@ -214,7 +215,17 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
   try {
     const facialProfile = await getFacialProfileMeta(user.id)
     const recentSearches = await listRecentSearches(user.id, 20)
-    const processedAlbums = buildProcessedAlbums(recentSearches)
+    let processedAlbums = buildProcessedAlbums(recentSearches)
+    const categoryByHash = await getEventCategoriesByUrlHashes(
+      processedAlbums.map((album) => hashAlbumUrl(album.albumUrl)),
+    )
+    processedAlbums = processedAlbums.map((album) => {
+      const fromCollection = categoryByHash.get(hashAlbumUrl(album.albumUrl)) ?? null
+      return {
+        ...album,
+        eventCategory: fromCollection ?? album.eventCategory,
+      }
+    })
     const activeAlbumJobs = await listResumableJobsForUser(user.id)
 
     sendJson(res, 200, {

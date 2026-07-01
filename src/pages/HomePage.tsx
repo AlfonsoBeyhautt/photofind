@@ -13,6 +13,8 @@ import { useAlbum } from '../context/AlbumContext'
 import { useAuth } from '../context/AuthContext'
 import { recordSearch } from '../lib/auth/authClient'
 import { resetAllProcessingRuns } from '../lib/processing/processingRunGuard'
+import type { EventCategory } from '../data/eventCategories'
+
 import type { ResumeAlbumJobState } from '../lib/recognition/activeAlbumJobs'
 import type { RecognitionSearchResult } from '../types/recognition'
 
@@ -21,6 +23,7 @@ type FlowStep = 'hero' | 'person' | 'processing' | 'results'
 type FlowData = PersonContinueData & {
   albumUrl: string
   flowMode?: AlbumFlowMode
+  category?: EventCategory | null
 }
 
 export function HomePage() {
@@ -43,8 +46,6 @@ export function HomePage() {
     setFlowData({
       albumUrl: resume.albumUrl,
       method: 'upload',
-      category: 'fiesta',
-      extraInfo: {},
       referenceToken: resume.referenceToken,
       faceBox: { left: 0, top: 0, width: 0, height: 0 },
     })
@@ -52,7 +53,7 @@ export function HomePage() {
     navigate(location.pathname, { replace: true, state: null })
   }, [location.state, location.pathname, navigate, setAlbumUrl])
 
-  const handleAnalyze = useCallback((url: string, mode: AlbumFlowMode = 'search') => {
+  const handleAnalyze = useCallback((url: string, mode: AlbumFlowMode = 'search', category?: EventCategory | null) => {
     setAlbumUrl(url)
     setSearchResult(null)
     setInitialRetry(false)
@@ -61,8 +62,7 @@ export function HomePage() {
       setFlowData({
         albumUrl: url,
         method: 'upload',
-        category: 'fiesta',
-        extraInfo: {},
+        category: category ?? null,
         referenceToken: '',
         faceBox: { left: 0, top: 0, width: 0, height: 0 },
         flowMode: 'group',
@@ -74,8 +74,7 @@ export function HomePage() {
     setFlowData({
       albumUrl: url,
       method: 'upload',
-      category: 'fiesta',
-      extraInfo: {},
+      category: category ?? null,
       referenceToken: '',
       faceBox: { left: 0, top: 0, width: 0, height: 0 },
       flowMode: 'search',
@@ -98,7 +97,7 @@ export function HomePage() {
         albumName: album.folderName,
         albumUrl: flowData.albumUrl,
         provider: album.source,
-        eventCategory: flowData.category,
+        ...(flowData.category ? { eventCategory: flowData.category } : {}),
         photosFound: result.matchedImageIds.length,
         totalPhotos: result.albumTotal,
       })
@@ -150,6 +149,7 @@ export function HomePage() {
               key={`indexing-${flowData.albumUrl}-${initialRetry ? 'retry' : 'run'}`}
               albumUrl={flowData.albumUrl}
               mode="index-only"
+              eventCategory={flowData.category ?? null}
               userId={user?.id ?? null}
               initialRetry={initialRetry}
               onIndexComplete={handleIndexComplete}
@@ -161,6 +161,7 @@ export function HomePage() {
               key={`processing-${flowData.albumUrl}-${flowData.referenceToken}-${initialRetry ? 'retry' : 'run'}`}
               albumUrl={flowData.albumUrl}
               referenceToken={flowData.referenceToken}
+              eventCategory={flowData.category ?? null}
               qualityWarning={flowData.qualityWarning}
               userId={user?.id ?? null}
               initialRetry={initialRetry}
@@ -172,7 +173,7 @@ export function HomePage() {
             <ResultsScreen
               key="results"
               album={album}
-              category={flowData.category}
+              category={flowData.category ?? null}
               searchResult={searchResult}
               qualityWarning={flowData.qualityWarning}
               onRestart={handleRestart}

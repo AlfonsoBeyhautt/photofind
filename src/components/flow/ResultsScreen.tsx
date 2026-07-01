@@ -9,7 +9,7 @@ import { Badge } from '../ui/Badge'
 import { PremiumSection } from './PremiumSection'
 import { PhotoGallery } from '../gallery/PhotoGallery'
 import { PhotoLightbox } from '../gallery/PhotoLightbox'
-import { EVENT_CATEGORIES, type EventCategory } from '../../data/mock'
+import { eventCategoryLabel, type EventCategory } from '../../data/eventCategories'
 import type { AlbumData, AlbumImage } from '../../types/album'
 import type { RecognitionSearchResult } from '../../types/recognition'
 import { getProviderMeta } from '../../types/provider'
@@ -18,7 +18,7 @@ import { cn } from '../../lib/utils'
 
 interface ResultsScreenProps {
   album: AlbumData
-  category: EventCategory
+  category?: EventCategory | null
   searchResult: RecognitionSearchResult
   qualityWarning?: string
   onRestart: () => void
@@ -34,7 +34,7 @@ export function ResultsScreen({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const categoryInfo = EVENT_CATEGORIES.find((c) => c.id === category)
+  const categoryLabel = category ? eventCategoryLabel(category) : null
   const providerLabel = getProviderMeta(album.source)?.label ?? album.source
 
   const images = useMemo(() => {
@@ -103,7 +103,9 @@ export function ResultsScreen({
                   <StatRow icon={Sparkles} label="Coincidencias" value={String(matchCount)} accent />
                   <StatRow icon={ScanFace} label="Fotos analizadas" value={String(analyzedCount)} />
                   <StatRow icon={FolderOpen} label="Carpeta" value={album.folderName} />
-                  <StatRow icon={Tag} label="Evento" value={categoryInfo?.label ?? '—'} />
+                  {categoryLabel && (
+                    <StatRow icon={Tag} label="Evento" value={categoryLabel} />
+                  )}
                   <StatRow icon={Calendar} label="Fuente" value={providerLabel} />
                 </div>
               </div>

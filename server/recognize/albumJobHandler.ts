@@ -18,6 +18,7 @@ interface JobStartBody {
   folderId?: string
   folderName?: string
   albumUrl?: string
+  eventCategory?: string
   images?: Pick<AlbumImage, 'id' | 'name'>[]
   sessionId?: string
   userId?: string
@@ -51,7 +52,7 @@ export async function handleAlbumJobStartRequest(
     return
   }
 
-  const { source, folderId, folderName, albumUrl, images, sessionId, userId, retry } = body
+  const { source, folderId, folderName, albumUrl, eventCategory, images, sessionId, userId, retry } = body
   if (!source || !folderId || !Array.isArray(images) || images.length === 0) {
     sendJson(res, 400, { ok: false, error: { code: 'ALBUM_JOB_FAILED', message: 'Faltan datos del álbum.' } })
     return
@@ -62,6 +63,7 @@ export async function handleAlbumJobStartRequest(
     folderId,
     folderName,
     albumUrl,
+    eventCategory,
     images,
     sessionId,
     userId,

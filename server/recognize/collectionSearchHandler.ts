@@ -17,6 +17,7 @@ interface PrepareCollectionBody {
   folderId?: string
   folderName?: string
   albumUrl?: string
+  eventCategory?: string
   images?: Pick<AlbumImage, 'id' | 'name'>[]
 }
 
@@ -50,7 +51,7 @@ export async function handlePrepareCollectionRequest(
     return
   }
 
-  const { source, folderId, folderName, albumUrl, images } = body
+  const { source, folderId, folderName, albumUrl, eventCategory, images } = body
   if (!source || !folderId || !Array.isArray(images) || images.length === 0) {
     sendJson(res, 400, {
       ok: false,
@@ -64,6 +65,7 @@ export async function handlePrepareCollectionRequest(
     folderId,
     folderName,
     albumUrl,
+    eventCategory,
     images,
   })
   sendJson(res, result.ok ? 200 : 400, result)

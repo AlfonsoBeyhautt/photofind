@@ -58,7 +58,7 @@ export interface SearchHistoryItem {
   albumName: string
   albumUrl: string
   provider: string
-  eventCategory: string
+  eventCategory: string | null
   photosFound: number
   totalPhotos: number | null
   createdAt: string
@@ -71,6 +71,7 @@ export interface ProcessedAlbumItem {
   totalPhotos: number | null
   lastSearchedAt: string
   searchCount: number
+  eventCategory: string | null
 }
 
 export type ActiveAlbumJobStatus = 'pending' | 'processing' | 'retrying' | 'ready' | 'failed'
@@ -102,7 +103,7 @@ export interface RecordSearchBody {
   albumName: string
   albumUrl: string
   provider: string
-  eventCategory: string
+  eventCategory?: string | null
   photosFound: number
   totalPhotos?: number | null
 }

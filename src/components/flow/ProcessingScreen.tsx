@@ -28,6 +28,7 @@ interface ProcessingScreenProps {
   albumUrl: string
   referenceToken?: string
   mode?: 'search' | 'index-only'
+  eventCategory?: string | null
   qualityWarning?: string
   userId?: string | null
   initialRetry?: boolean
@@ -42,6 +43,7 @@ export function ProcessingScreen({
   albumUrl,
   referenceToken = '',
   mode = 'search',
+  eventCategory = null,
   userId,
   initialRetry = false,
   onComplete,
@@ -61,6 +63,7 @@ export function ProcessingScreen({
       provider={provider as 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'}
       referenceToken={referenceToken}
       mode={mode}
+      eventCategory={eventCategory}
       userId={userId}
       initialRetry={initialRetry}
       onComplete={onComplete}
@@ -78,6 +81,7 @@ interface AlbumProcessingScreenProps {
   provider: 'google-drive' | 'dropbox' | 'pixieset' | 'wetransfer'
   referenceToken: string
   mode: 'search' | 'index-only'
+  eventCategory?: string | null
   userId?: string | null
   initialRetry?: boolean
   onComplete?: (result: RecognitionSearchResult) => void
@@ -102,6 +106,7 @@ function AlbumProcessingScreen({
   provider,
   referenceToken,
   mode,
+  eventCategory = null,
   userId,
   initialRetry = false,
   onComplete,
@@ -146,6 +151,7 @@ function AlbumProcessingScreen({
   const setThumbnailsReadyRef = useRef(setThumbnailsReady)
   const errorRef = useRef(error)
   const userIdRef = useRef(userId)
+  const eventCategoryRef = useRef(eventCategory)
 
   fetchAlbumRef.current = fetchAlbum
   onCompleteRef.current = onComplete
@@ -153,6 +159,7 @@ function AlbumProcessingScreen({
   setThumbnailsReadyRef.current = setThumbnailsReady
   errorRef.current = error
   userIdRef.current = userId
+  eventCategoryRef.current = eventCategory
 
   const handleCancel = () => {
     abortRef.current?.abort()
@@ -270,6 +277,7 @@ function AlbumProcessingScreen({
         if (mode === 'index-only') {
           const indexResult = await runAlbumIndexOnlyPipeline(album, albumUrl, {
             userId: userIdRef.current,
+            eventCategory: eventCategoryRef.current,
             retry: retryCount > 0,
             shouldAbort: () => cancelled || abort.signal.aborted,
             onProgress: ({ phase: searchPhase, message, current, total, collectionReused: reused, asyncMode: isAsync, canLeaveScreen: leaveOk, progressPercent }) => {
@@ -342,6 +350,7 @@ function AlbumProcessingScreen({
             albumUrl,
             {
               userId: userIdRef.current,
+              eventCategory: eventCategoryRef.current,
               retry: retryCount > 0,
               shouldAbort: () => cancelled || abort.signal.aborted,
               onProgress: ({ phase: searchPhase, message, current, total, matched, collectionReused: reused, asyncMode: isAsync, canLeaveScreen: leaveOk, progressPercent }) => {

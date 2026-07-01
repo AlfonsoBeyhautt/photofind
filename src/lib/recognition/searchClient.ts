@@ -6,13 +6,13 @@ const COMPARE_PHASE_MAX_PHOTOS = 50
 const INDEX_BATCH_SIZE = 10
 
 const SEARCH_MESSAGES: Record<string, string> = {
-  AWS_CREDENTIALS_MISSING: 'El reconocimiento facial no está configurado en el servidor.',
-  AWS_REKOGNITION_ERROR: 'AWS Rekognition no pudo completar la comparación.',
-  RECOGNITION_REFERENCE_EXPIRED: 'La referencia expiró. Volvé a subir la foto o sacate otra selfie.',
-  RECOGNITION_NO_FACES_IN_ALBUM: 'No encontramos caras en las fotos analizadas del álbum.',
-  RECOGNITION_INDEXING_FAILED: 'No pudimos leer algunas fotos del álbum para compararlas.',
-  RECOGNITION_SEARCH_FAILED: 'No pudimos buscar coincidencias en el álbum.',
-  RECOGNITION_COLLECTION_METADATA_ERROR: 'No pudimos guardar el análisis del álbum.',
+  AWS_CREDENTIALS_MISSING: 'El reconocimiento facial no est? configurado en el servidor.',
+  AWS_REKOGNITION_ERROR: 'AWS Rekognition no pudo completar la comparaci?n.',
+  RECOGNITION_REFERENCE_EXPIRED: 'La referencia expir?. Volv? a subir la foto o sacate otra selfie.',
+  RECOGNITION_NO_FACES_IN_ALBUM: 'No encontramos caras en las fotos analizadas del ?lbum.',
+  RECOGNITION_INDEXING_FAILED: 'No pudimos leer algunas fotos del ?lbum para compararlas.',
+  RECOGNITION_SEARCH_FAILED: 'No pudimos buscar coincidencias en el ?lbum.',
+  RECOGNITION_COLLECTION_METADATA_ERROR: 'No pudimos guardar el an?lisis del ?lbum.',
 }
 
 export function getRecognitionSearchErrorMessage(code: string, fallback?: string): string {
@@ -187,10 +187,11 @@ export async function searchAlbumWithCollection(
   album: AlbumData,
   albumUrl: string,
   onProgress?: (update: SearchProgressUpdate) => void,
+  eventCategory?: string | null,
 ): Promise<{ ok: true; result: RecognitionSearchResult } | { ok: false; message: string }> {
   onProgress?.({
     phase: 'checking',
-    message: 'Revisando colección...',
+    message: 'Revisando colecci?n...',
     total: album.totalImages,
   })
 
@@ -204,6 +205,7 @@ export async function searchAlbumWithCollection(
         folderId: album.folderId,
         folderName: album.folderName,
         albumUrl,
+        eventCategory: eventCategory ?? undefined,
         images: album.images.map((img) => ({ id: img.id, name: img.name })),
       }),
     })
@@ -248,7 +250,7 @@ export async function searchAlbumWithCollection(
   if (prepare.reused) {
     onProgress?.({
       phase: 'checking',
-      message: 'Usando análisis previo del álbum',
+      message: 'Usando an?lisis previo del ?lbum',
       current: prepare.indexedImages,
       total: prepare.totalImages,
       collectionReused: true,
@@ -256,7 +258,7 @@ export async function searchAlbumWithCollection(
   } else if (prepare.pendingImageIds.length > 0) {
     onProgress?.({
       phase: 'indexing',
-      message: 'Analizando álbum por primera vez',
+      message: 'Analizando ?lbum por primera vez',
       current: prepare.indexedImages,
       total: prepare.totalImages,
     })
@@ -376,6 +378,7 @@ export async function indexAlbumWithCollection(
   album: AlbumData,
   albumUrl: string,
   onProgress?: (update: SearchProgressUpdate) => void,
+  eventCategory?: string | null,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   onProgress?.({
     phase: 'checking',
@@ -393,6 +396,7 @@ export async function indexAlbumWithCollection(
         folderId: album.folderId,
         folderName: album.folderName,
         albumUrl,
+        eventCategory: eventCategory ?? undefined,
         images: album.images.map((img) => ({ id: img.id, name: img.name })),
       }),
     })

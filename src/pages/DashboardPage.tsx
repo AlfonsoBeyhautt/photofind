@@ -30,12 +30,8 @@ import {
 } from '../lib/recognition/activeAlbumJobs'
 import { clearActiveAlbumJob, pollAlbumJobStatus } from '../lib/recognition/albumJobClient'
 import type { ProcessedAlbumItem, SearchHistoryItem } from '../types/auth'
-import { EVENT_CATEGORIES } from '../data/mock'
+import { eventCategoryLabel } from '../data/eventCategories'
 import { isPersonGroupingEnabled } from '../types/personGrouping'
-
-function eventLabel(categoryId: string): string {
-  return EVENT_CATEGORIES.find((c) => c.id === categoryId)?.label ?? categoryId
-}
 
 export function DashboardPage() {
   const { user, facialProfile } = useAuth()
@@ -240,7 +236,9 @@ export function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{search.albumName}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <Badge variant="default">{eventLabel(search.eventCategory)}</Badge>
+                          {search.eventCategory && (
+                            <Badge variant="default">{eventCategoryLabel(search.eventCategory)}</Badge>
+                          )}
                           <span className="text-xs text-text-dim">{providerLabel(search.provider)}</span>
                           <span className="text-xs text-text-dim flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -286,6 +284,14 @@ export function DashboardPage() {
                         <p className="font-medium truncate">{album.albumName}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-text-dim">
                           <span>{providerLabel(album.provider)}</span>
+                          {album.eventCategory && (
+                            <>
+                              <span>·</span>
+                              <Badge variant="default" className="text-[10px] py-0">
+                                {eventCategoryLabel(album.eventCategory)}
+                              </Badge>
+                            </>
+                          )}
                           {album.totalPhotos != null && (
                             <>
                               <span>·</span>

@@ -17,6 +17,7 @@ export interface AlbumCollectionRow {
   indexed_images: number
   indexed_faces: number
   status: AlbumCollectionStatus
+  event_category: string | null
   created_at: string
   updated_at: string
   expires_at: string | null
@@ -134,6 +135,58 @@ export async function renewExpiredAlbumCollection(
   return data as AlbumCollectionRow
 }
 
+export async function updateAlbumCollectionEventCategory(
+  id: string,
+  eventCategory: string,
+): Promise<void> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return
+
+  const normalized = eventCategory.trim()
+  if (!normalized) return
+
+  const { error } = await admin.client
+    .from('album_collections')
+    .update({ event_category: normalized })
+    .eq('id', id)
+
+  if (error) {
+    console.error('[PhotoFind:Collections] update_event_category', error.message)
+  }
+}
+
+export async function getEventCategoriesByUrlHashes(
+  urlHashes: string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  if (urlHashes.length === 0) return result
+
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return result
+
+  const unique = [...new Set(urlHashes.filter(Boolean))]
+  const { data, error } = await admin.client
+    .from('album_collections')
+    .select('album_url_hash, event_category')
+    .in('album_url_hash', unique)
+    .not('event_category', 'is', null)
+
+  if (error) {
+    console.error('[PhotoFind:Collections] get_event_categories', error.message)
+    return result
+  }
+
+  for (const row of data ?? []) {
+    const hash = row.album_url_hash as string | null
+    const category = row.event_category as string | null
+    if (hash && category) {
+      result.set(hash, category)
+    }
+  }
+
+  return result
+}
+
 export async function createAlbumCollection(input: {
   albumFingerprint: string
   provider: string
@@ -142,6 +195,7 @@ export async function createAlbumCollection(input: {
   folderName?: string
   collectionId: string
   totalImages: number
+  eventCategory?: string | null
 }): Promise<AlbumCollectionRow | null> {
   const admin = tryGetSupabaseAdmin()
   if ('error' in admin) return null
@@ -158,6 +212,7 @@ export async function createAlbumCollection(input: {
     indexed_faces: 0,
     status: 'pending' as const,
     expires_at: retentionExpiresAt(),
+    ...(input.eventCategory?.trim() ? { event_category: input.eventCategory.trim() } : {}),
   }
 
   const { data, error } = await admin.client
