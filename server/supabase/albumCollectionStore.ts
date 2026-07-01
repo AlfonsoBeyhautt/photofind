@@ -340,10 +340,6 @@ export async function countIndexedFaces(albumCollectionId: string): Promise<numb
   return count ?? 0
 }
 
-export function isAlbumCollectionStoreAvailable(): boolean {
-  return !('error' in tryGetSupabaseAdmin())
-}
-
 export async function getAlbumCollectionById(id: string): Promise<AlbumCollectionRow | null> {
   const admin = tryGetSupabaseAdmin()
   if ('error' in admin) return null
@@ -360,6 +356,34 @@ export async function getAlbumCollectionById(id: string): Promise<AlbumCollectio
   }
 
   return data as AlbumCollectionRow | null
+}
+
+export async function findAlbumCollectionByUrlHash(
+  albumUrlHash: string,
+): Promise<AlbumCollectionRow | null> {
+  const admin = tryGetSupabaseAdmin()
+  if ('error' in admin) return null
+
+  const { data, error } = await admin.client
+    .from('album_collections')
+    .select('*')
+    .eq('album_url_hash', albumUrlHash)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[PhotoFind:Collections] find_by_url_hash', error.message)
+    return null
+  }
+
+  const row = data as AlbumCollectionRow | null
+  if (!row || isExpired(row)) return null
+  return row
+}
+
+export function isAlbumCollectionStoreAvailable(): boolean {
+  return !('error' in tryGetSupabaseAdmin())
 }
 
 export async function listExpiredCollectionRows(): Promise<AlbumCollectionRow[]> {

@@ -42,6 +42,12 @@ import {
 } from './recognize/collectionSearchHandler'
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import {
+  handlePersonGroupDetailRequest,
+  handlePersonGroupingEnsureRequest,
+  handlePersonGroupingProcessRequest,
+  handlePersonGroupsListRequest,
+} from './recognize/personGroupingHandler'
+import {
   handleDeleteFacialProfileRequest,
   handleDashboardRequest,
   handleCancelActiveAlbumJobRequest,
@@ -257,6 +263,56 @@ export function createApp(options: CreateAppOptions = {}): Express {
       res.status(500).json({
         ok: false,
         error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos procesar el siguiente lote del álbum.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/person-grouping/ensure', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handlePersonGroupingEnsureRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] person_grouping_ensure_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos iniciar la agrupación por personas.' },
+      })
+    }
+  })
+
+  app.post('/api/recognize/person-grouping/process', async (req, res) => {
+    try {
+      const body = JSON.stringify(req.body ?? {})
+      await handlePersonGroupingProcessRequest(req, res, body)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] person_grouping_process_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos procesar la agrupación por personas.' },
+      })
+    }
+  })
+
+  app.get('/api/recognize/person-groups', async (req, res) => {
+    try {
+      await handlePersonGroupsListRequest(req, res)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] person_groups_list_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos listar las personas del álbum.' },
+      })
+    }
+  })
+
+  app.get('/api/recognize/person-group', async (req, res) => {
+    try {
+      await handlePersonGroupDetailRequest(req, res)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] person_group_detail_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos cargar el grupo.' },
       })
     }
   })

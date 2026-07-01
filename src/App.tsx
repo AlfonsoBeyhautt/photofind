@@ -7,6 +7,7 @@ import { RegisterPage } from './pages/RegisterPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { PersonGroupsPage } from './pages/PersonGroupsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, loading } = useAuth()
@@ -56,6 +57,10 @@ function AppRoutes() {
             <ProfilePage />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/personas"
+        element={<PersonGroupsPage />}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

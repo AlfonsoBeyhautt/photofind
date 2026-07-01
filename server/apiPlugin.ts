@@ -40,6 +40,12 @@ import {
 import { handleSelectReferenceFaceRequest, handleValidateReferenceRequest } from './recognize/referenceHandler'
 import { handleHealthRequest } from './debug/healthHandler'
 import {
+  handlePersonGroupDetailRequest,
+  handlePersonGroupingEnsureRequest,
+  handlePersonGroupingProcessRequest,
+  handlePersonGroupsListRequest,
+} from './recognize/personGroupingHandler'
+import {
   handleDeleteFacialProfileRequest,
   handleDashboardRequest,
   handleCancelActiveAlbumJobRequest,
@@ -277,6 +283,58 @@ export function driveApiPlugin(): Plugin {
             sendJson(res, 500, {
               ok: false,
               error: { code: 'ALBUM_JOB_FAILED', message: 'No pudimos procesar el siguiente lote del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/person-grouping/ensure') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handlePersonGroupingEnsureRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos iniciar la agrupación por personas.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/person-grouping/process') && req.method === 'POST') {
+          try {
+            const body = await readBody(req)
+            await handlePersonGroupingProcessRequest(req, res, body)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos procesar la agrupación por personas.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/person-groups') && req.method === 'GET') {
+          try {
+            await handlePersonGroupsListRequest(req, res)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos listar las personas del álbum.' },
+            })
+          }
+          return
+        }
+
+        if (req.url?.startsWith('/api/recognize/person-group') && req.method === 'GET'
+            && !req.url.startsWith('/api/recognize/person-groups')
+            && !req.url.startsWith('/api/recognize/person-grouping')) {
+          try {
+            await handlePersonGroupDetailRequest(req, res)
+          } catch {
+            sendJson(res, 500, {
+              ok: false,
+              error: { code: 'PERSON_GROUPING_FAILED', message: 'No pudimos cargar el grupo.' },
             })
           }
           return

@@ -9,6 +9,7 @@ import {
   ResourceAlreadyExistsException,
   ResourceNotFoundException,
   SearchFacesByImageCommand,
+  SearchFacesCommand,
   type FaceDetail,
   type BoundingBox,
 } from '@aws-sdk/client-rekognition'
@@ -125,6 +126,26 @@ export async function searchFacesByImage(
     Image: { Bytes: imageBytes },
     FaceMatchThreshold: SIMILARITY_THRESHOLD,
     MaxFaces: 100,
+  }))
+
+  return (response.FaceMatches ?? [])
+    .filter((match) => match.Face?.FaceId && (match.Similarity ?? 0) >= SIMILARITY_THRESHOLD)
+    .map((match) => ({
+      faceId: match.Face!.FaceId!,
+      similarity: match.Similarity ?? 0,
+    }))
+}
+
+export async function searchFaces(
+  collectionId: string,
+  faceId: string,
+  maxFaces = 4096,
+): Promise<SearchFaceMatch[]> {
+  const response = await getClient().send(new SearchFacesCommand({
+    CollectionId: collectionId,
+    FaceId: faceId,
+    FaceMatchThreshold: SIMILARITY_THRESHOLD,
+    MaxFaces: maxFaces,
   }))
 
   return (response.FaceMatches ?? [])
