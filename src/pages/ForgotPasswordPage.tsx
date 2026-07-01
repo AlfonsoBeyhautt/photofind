@@ -77,7 +77,7 @@ export function ForgotPasswordPage() {
       </form>
 
       <p className="text-center text-sm text-text-muted mt-6">
-        <Link to="/login" className="text-accent-bright hover:underline font-medium">
+        <Link to="/login" className="inline-flex items-center min-h-[44px] text-accent-bright hover:underline font-medium py-1">
           ← Volver al inicio de sesión
         </Link>
       </p>

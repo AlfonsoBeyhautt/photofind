@@ -77,7 +77,7 @@ export function FaceSelector({
         highlightedIndex={highlightedIndex}
         selectedIndex={pendingIndex}
         onFaceClick={setPendingIndex}
-        maxHeight={200}
+        maxHeight={280}
         interactive
       />
 
@@ -94,7 +94,7 @@ export function FaceSelector({
                 onMouseLeave={() => setHoverIndex(null)}
                 onClick={() => setPendingIndex(face.index)}
                 className={cn(
-                  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border text-left transition-all',
+                  'w-full flex items-center gap-3 px-3 py-3 min-h-[52px] rounded-lg border text-left transition-all',
                   isPending
                     ? 'border-accent bg-accent/10 ring-1 ring-accent/30'
                     : isHover
@@ -132,7 +132,7 @@ export function FaceSelector({
 
       <Button
         type="button"
-        size="sm"
+        size="md"
         variant="primary"
         className="w-full"
         disabled={pendingIndex === null || loading}
@@ -181,7 +181,7 @@ function FaceThumbnail({ previewUrl, faceBox }: { previewUrl: string; faceBox: F
   const crop = faceThumbnailCrop(faceBox)
 
   return (
-    <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-elevated shrink-0 ring-1 ring-border/80 relative">
+    <div className="w-11 h-11 rounded-full overflow-hidden bg-bg-elevated shrink-0 ring-1 ring-border/80 relative">
       <img
         src={previewUrl}
         alt=""

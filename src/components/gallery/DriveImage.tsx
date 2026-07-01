@@ -31,13 +31,13 @@ export function DriveImage({ image, className }: DriveImageProps) {
     return (
       <div className={cn('relative w-full h-full bg-bg-elevated flex flex-col items-center justify-center gap-2 p-2 text-center', className)}>
         <ImageIcon className="w-6 h-6 text-text-dim" />
-        <p className="text-[10px] leading-tight text-text-muted px-1">
+        <p className="text-xs leading-snug text-text-muted px-1">
           Vista previa no disponible para este HEIC
         </p>
         <button
           type="button"
           onClick={handleDownload}
-          className="flex items-center gap-1 text-[10px] text-accent-bright hover:underline"
+          className="flex items-center justify-center gap-1.5 min-h-[44px] text-xs text-accent-bright hover:underline px-2"
         >
           <Download className="w-3 h-3" />
           Descargar original
@@ -50,7 +50,7 @@ export function DriveImage({ image, className }: DriveImageProps) {
     return (
       <div className={cn('relative w-full h-full bg-bg-elevated flex flex-col items-center justify-center gap-2 p-2', className)}>
         <ImageIcon className="w-6 h-6 text-text-dim" />
-        <p className="text-[10px] text-text-muted">Vista previa no disponible</p>
+        <p className="text-xs text-text-muted">Vista previa no disponible</p>
       </div>
     )
   }

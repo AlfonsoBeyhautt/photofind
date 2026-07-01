@@ -147,12 +147,12 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.5 }}
-      className="min-h-screen px-6 pt-28 pb-16 max-w-5xl mx-auto"
+      className="min-h-screen min-h-dvh px-4 sm:px-6 page-top pb-28 max-w-5xl mx-auto safe-bottom"
     >
       <button
         type="button"
         onClick={onBack}
-        className="text-sm text-text-muted hover:text-text mb-8 transition-colors"
+        className="text-sm text-text-muted hover:text-text mb-6 sm:mb-8 transition-colors py-2 min-h-[44px]"
       >
         ← Volver
       </button>
@@ -160,7 +160,7 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
       <motion.h2
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="font-display text-3xl md:text-4xl font-bold mb-2"
+        className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mb-2"
       >
         ¿A quién querés encontrar?
       </motion.h2>
@@ -296,7 +296,7 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
               whileTap={{ scale: 0.98 }}
               onClick={() => { setCategory(cat.id); setExtraInfo({}) }}
               className={cn(
-                'relative p-4 rounded-xl border text-left transition-all',
+                'relative p-4 min-h-[72px] rounded-xl border text-left transition-all',
                 category === cat.id
                   ? 'border-accent bg-accent/10 shadow-lg shadow-accent/10'
                   : 'border-border bg-surface/50 hover:border-border/80 hover:bg-surface',
@@ -343,10 +343,11 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
+      <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 mt-8 border-t border-border-subtle bg-bg/95 backdrop-blur-md safe-bottom">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 max-w-5xl mx-auto">
         {referenceToken && (
           <p className={cn(
-            'text-sm sm:mr-auto',
+            'text-sm sm:mr-auto text-center sm:text-left',
             qualityWarning ? 'text-amber-300' : 'text-emerald-400',
           )}>
             {qualityWarning
@@ -356,6 +357,7 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
         )}
         <Button
           size="lg"
+          className="w-full sm:w-auto"
           disabled={!canContinue}
           onClick={() => {
             if (!canContinue || !method || !category || !referenceToken || !faceBox) return
@@ -372,6 +374,7 @@ export function PersonSelection({ onContinue, onBack }: PersonSelectionProps) {
         >
           Iniciar análisis
         </Button>
+        </div>
       </div>
     </motion.div>
   )
@@ -407,7 +410,7 @@ function MethodCard({
       <button
         type="button"
         onClick={disabled ? undefined : onClick}
-        className="w-full text-left"
+        className="w-full text-left min-h-[44px]"
       >
         <div className={cn(
           'w-10 h-10 rounded-xl flex items-center justify-center mb-3',

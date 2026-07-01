@@ -27,15 +27,15 @@ export function FacialProfileSetup({ onSaved, onError, onCancel }: FacialProfile
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
-        <Button variant={mode === 'upload' ? 'primary' : 'outline'} size="sm" onClick={() => setMode('upload')}>
+        <Button variant={mode === 'upload' ? 'primary' : 'outline'} size="md" className="flex-1 sm:flex-none" onClick={() => setMode('upload')}>
           Subir foto
         </Button>
-        <Button variant={mode === 'camera' ? 'primary' : 'outline'} size="sm" onClick={() => setMode('camera')}>
+        <Button variant={mode === 'camera' ? 'primary' : 'outline'} size="md" className="flex-1 sm:flex-none" onClick={() => setMode('camera')}>
           <Camera className="w-4 h-4" />
           Selfie
         </Button>
         {onCancel && (
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="ghost" size="md" onClick={onCancel}>
             Cancelar
           </Button>
         )}

@@ -41,7 +41,7 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
   }
 
   return (
-    <div className={cn('glass rounded-2xl p-6', compact ? '' : 'mb-8')}>
+    <div className={cn('glass rounded-2xl p-4 sm:p-6', compact ? '' : 'mb-8')}>
       <h3 className="font-display font-semibold text-lg mb-1 flex items-center gap-2">
         <User className="w-5 h-5 text-accent-bright" />
         Mi perfil facial
@@ -67,12 +67,12 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
               <p className="text-xs text-amber-300 mt-1">{facialProfile.qualityWarning}</p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setEditing(true)} disabled={deleting}>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+            <Button variant="outline" size="md" className="w-full sm:w-auto" onClick={() => setEditing(true)} disabled={deleting}>
               <RefreshCw className="w-4 h-4" />
               Reemplazar
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleting}>
+            <Button variant="ghost" size="md" className="w-full sm:w-auto" onClick={handleDelete} disabled={deleting}>
               <Trash2 className="w-4 h-4" />
               {deleting ? 'Borrando…' : 'Borrar'}
             </Button>

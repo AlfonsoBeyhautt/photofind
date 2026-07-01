@@ -357,7 +357,7 @@ function AlbumProcessingScreen({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="min-h-screen flex items-center justify-center px-6 pt-24 pb-16"
+        className="min-h-screen min-h-dvh flex items-center justify-center px-4 sm:px-6 page-top pb-16 safe-bottom"
       >
         <div className="w-full max-w-lg">
           <div className="glass rounded-2xl p-8 text-center glow-blue">
@@ -408,10 +408,10 @@ function AlbumProcessingScreen({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.5 }}
-      className="min-h-screen flex items-center justify-center px-6 pt-24 pb-16"
+      className="min-h-screen min-h-dvh flex items-center justify-center px-4 sm:px-6 page-top pb-16 safe-bottom"
     >
       <div className="w-full max-w-3xl">
-        <div className="text-center mb-12">
+        <div className="text-center mb-8 sm:mb-12">
           <motion.div
             animate={{ rotate: phase !== 'ready' ? 360 : 0 }}
             transition={{ duration: 2, repeat: phase !== 'ready' ? Infinity : 0, ease: 'linear' }}
@@ -431,7 +431,7 @@ function AlbumProcessingScreen({
             {providerMeta?.label ?? provider}
           </Badge>
 
-          <h2 className="font-display text-3xl md:text-4xl font-bold mb-3">
+          <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mb-3 px-2 break-words">
             {phase === 'recognizing'
               ? recognizePhase === 'indexing'
                 ? 'Indexando caras del álbum...'
@@ -447,7 +447,7 @@ function AlbumProcessingScreen({
                   : 'Leyendo tu álbum...'}
           </h2>
 
-          <p className="text-text-muted">{statusLine}</p>
+          <p className="text-text-muted px-2 break-words">{statusLine}</p>
 
           {largeAlbumWarning && (
             <p className="text-sm text-amber-300/90 mt-3 max-w-md mx-auto">{largeAlbumWarning}</p>
@@ -490,7 +490,7 @@ function AlbumProcessingScreen({
           )}
         </div>
 
-        <div className="glass rounded-2xl p-8 mb-8">
+        <div className="glass rounded-2xl p-5 sm:p-8 mb-6 sm:mb-8">
           <div className="flex justify-between text-sm mb-3">
             <span className="text-text-muted">Progreso</span>
             <span className="font-mono text-accent-bright">{Math.round(progress)}%</span>
@@ -552,7 +552,7 @@ function AlbumProcessingScreen({
 
         {(phase === 'preloading' || phase === 'recognizing') && (
           <div className="text-center">
-            <Button variant="ghost" size="sm" onClick={handleCancel}>
+            <Button variant="ghost" size="md" onClick={handleCancel}>
               <X className="w-4 h-4" />
               Cancelar y volver
             </Button>

@@ -86,21 +86,54 @@ export function ResultsScreen({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
-      className="min-h-screen"
+      className="min-h-screen min-h-dvh"
     >
-      <div className="px-6 pt-28 pb-8 max-w-7xl mx-auto">
-        <div className="flex flex-col lg:flex-row gap-8">
-          <div className="flex-1 min-w-0">
+      <div className="px-4 sm:px-6 page-top pb-24 lg:pb-8 safe-bottom max-w-7xl mx-auto">
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+          <motion.aside
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="lg:w-80 shrink-0 order-1 lg:order-2"
+          >
+            <div className="glass rounded-2xl p-5 sm:p-6 lg:sticky lg:top-28 space-y-6">
+              <div>
+                <h3 className="font-display font-semibold text-lg mb-4">Resumen</h3>
+                <div className="space-y-4">
+                  <StatRow icon={Sparkles} label="Coincidencias" value={String(matchCount)} accent />
+                  <StatRow icon={ScanFace} label="Fotos analizadas" value={String(analyzedCount)} />
+                  <StatRow icon={FolderOpen} label="Carpeta" value={album.folderName} />
+                  <StatRow icon={Tag} label="Evento" value={categoryInfo?.label ?? '—'} />
+                  <StatRow icon={Calendar} label="Fuente" value={providerLabel} />
+                </div>
+              </div>
+
+              {hasMatches && (
+                <div className="border-t border-border-subtle pt-6">
+                  <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-sm text-emerald-200/90">
+                    Mostrando solo las fotos donde aparecés vos (umbral de similitud 85%).
+                  </div>
+                </div>
+              )}
+
+              <Button variant="outline" className="w-full" onClick={onRestart}>
+                <RotateCcw className="w-4 h-4" />
+                Nueva búsqueda
+              </Button>
+            </div>
+          </motion.aside>
+
+          <div className="flex-1 min-w-0 order-2 lg:order-1">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-8"
+              className="mb-6 sm:mb-8"
             >
               <Badge variant={hasMatches ? 'success' : 'default'} className="mb-4">
                 <ScanFace className="w-3 h-3 mr-1" />
                 {hasMatches ? 'Coincidencias encontradas' : 'Sin coincidencias'}
               </Badge>
-              <h2 className="font-display text-3xl md:text-5xl font-bold mb-3">
+              <h2 className="font-display text-2xl sm:text-3xl md:text-5xl font-bold mb-3 leading-tight">
                 {hasMatches ? (
                   <>
                     Encontramos{' '}
@@ -112,7 +145,7 @@ export function ResultsScreen({
                   'No encontramos fotos tuyas'
                 )}
               </h2>
-              <p className="text-text-muted">
+              <p className="text-text-muted text-sm sm:text-base">
                 {hasMatches ? (
                   <>
                     Carpeta <strong className="text-text">{album.folderName}</strong> — {providerLabel}
@@ -139,28 +172,38 @@ export function ResultsScreen({
 
             {hasMatches ? (
               <>
-                <div className="flex flex-wrap items-center gap-3 mb-6">
-                  <Button variant="primary" onClick={() => downloadImages(images.map((i) => i.id))}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={() => downloadImages(images.map((i) => i.id))}
+                  >
                     <Download className="w-4 h-4" />
                     Descargar todas
                   </Button>
                   <Button
                     variant="secondary"
+                    className="w-full"
                     disabled={selected.size === 0}
                     onClick={() => downloadImages([...selected])}
                   >
                     <Download className="w-4 h-4" />
-                    Descargar seleccionadas {selected.size > 0 && `(${selected.size})`}
+                    Seleccionadas {selected.size > 0 && `(${selected.size})`}
                   </Button>
                   <Button
                     variant="ghost"
+                    className="w-full sm:col-span-2"
                     onClick={() => { setSelectMode(!selectMode); setSelected(new Set()) }}
                   >
                     {selectMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                    {selectMode ? 'Cancelar selección' : 'Seleccionar'}
+                    {selectMode ? 'Cancelar selección' : 'Seleccionar fotos'}
                   </Button>
                   {selectMode && (
-                    <button onClick={toggleAll} className="text-sm text-accent-bright hover:underline">
+                    <button
+                      type="button"
+                      onClick={toggleAll}
+                      className="text-sm text-accent-bright hover:underline py-2 sm:col-span-2 text-left"
+                    >
                       {selected.size === images.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
                     </button>
                   )}
@@ -175,56 +218,36 @@ export function ResultsScreen({
                 />
               </>
             ) : (
-              <div className="glass rounded-2xl p-12 text-center border border-border">
+              <div className="glass rounded-2xl p-8 sm:p-12 text-center border border-border">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-violet/10 border border-violet/20 flex items-center justify-center">
                   <ScanFace className="w-8 h-8 text-violet-soft" />
                 </div>
-                <p className="text-text-muted max-w-md mx-auto">
+                <p className="text-text-muted max-w-md mx-auto text-sm sm:text-base">
                   No encontramos fotos claras tuyas en las {analyzedCount} fotos que analizamos.
                   Probá con otra referencia más frontal o con mejor luz.
                 </p>
-                <Button variant="outline" className="mt-6" onClick={onRestart}>
+                <Button variant="outline" className="mt-6 w-full sm:w-auto" onClick={onRestart}>
                   <RotateCcw className="w-4 h-4" />
                   Nueva búsqueda
                 </Button>
               </div>
             )}
           </div>
-
-          <motion.aside
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="lg:w-80 shrink-0"
-          >
-            <div className="glass rounded-2xl p-6 sticky top-28 space-y-6">
-              <div>
-                <h3 className="font-display font-semibold text-lg mb-4">Resumen</h3>
-                <div className="space-y-4">
-                  <StatRow icon={Sparkles} label="Coincidencias" value={String(matchCount)} accent />
-                  <StatRow icon={ScanFace} label="Fotos analizadas" value={String(analyzedCount)} />
-                  <StatRow icon={FolderOpen} label="Carpeta" value={album.folderName} />
-                  <StatRow icon={Tag} label="Evento" value={categoryInfo?.label ?? '—'} />
-                  <StatRow icon={Calendar} label="Fuente" value={providerLabel} />
-                </div>
-              </div>
-
-              {hasMatches && (
-                <div className="border-t border-border-subtle pt-6">
-                  <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-sm text-emerald-200/90">
-                    Mostrando solo las fotos donde aparecés vos (umbral de similitud 85%).
-                  </div>
-                </div>
-              )}
-
-              <Button variant="outline" className="w-full" onClick={onRestart}>
-                <RotateCcw className="w-4 h-4" />
-                Nueva búsqueda
-              </Button>
-            </div>
-          </motion.aside>
         </div>
       </div>
+
+      {hasMatches && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 p-4 safe-bottom safe-x border-t border-border-subtle bg-bg/95 backdrop-blur-md">
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={() => downloadImages(images.map((i) => i.id))}
+          >
+            <Download className="w-4 h-4" />
+            Descargar {matchCount} foto{matchCount !== 1 ? 's' : ''}
+          </Button>
+        </div>
+      )}
 
       <PremiumSection />
 

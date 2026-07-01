@@ -76,7 +76,7 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -30 }}
       transition={{ duration: 0.5 }}
-      className="flex flex-col items-center justify-center min-h-screen px-6 pt-24 pb-16"
+      className="flex flex-col items-center justify-center min-h-screen min-h-dvh px-4 sm:px-6 page-top pb-16 safe-bottom"
     >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -94,7 +94,7 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="font-display text-5xl md:text-7xl font-bold text-center max-w-4xl leading-[1.1] tracking-tight mb-6"
+        className="font-display text-3xl sm:text-5xl md:text-7xl font-bold text-center max-w-4xl leading-[1.1] tracking-tight mb-6 px-2"
       >
         Encontrá tus fotos{' '}
         <span className="gradient-text">en segundos</span>
@@ -104,7 +104,7 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="text-lg md:text-xl text-text-muted text-center max-w-2xl mb-12 leading-relaxed"
+        className="text-base sm:text-lg md:text-xl text-text-muted text-center max-w-2xl mb-10 sm:mb-12 leading-relaxed px-2"
       >
         Pegá un enlace público de tu álbum. Detectamos automáticamente Google Drive, Dropbox, Pixieset o WeTransfer.
       </motion.p>
@@ -131,7 +131,7 @@ export function HeroSection({ onAnalyze }: HeroSectionProps) {
               className="flex-1 bg-transparent text-text placeholder:text-text-dim focus:outline-none text-base"
             />
           </div>
-          <Button size="lg" onClick={handleSubmit} className="shrink-0">
+          <Button size="lg" onClick={handleSubmit} className="shrink-0 w-full md:w-auto">
             Analizar álbum
             <ArrowRight className="w-4 h-4" />
           </Button>

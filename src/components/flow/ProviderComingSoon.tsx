@@ -68,13 +68,13 @@ export function ProviderComingSoon({ provider, onBack }: ProviderComingSoonProps
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.5 }}
-      className="flex flex-col items-center justify-center min-h-screen px-6 pt-24 pb-16"
+      className="flex flex-col items-center justify-center min-h-screen min-h-dvh px-4 sm:px-6 page-top pb-16 safe-bottom"
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
-        className="glass rounded-3xl p-10 md:p-14 max-w-xl w-full text-center glow-violet"
+        className="glass rounded-3xl p-6 sm:p-10 md:p-14 max-w-xl w-full text-center glow-violet"
       >
         <div className="flex justify-center mb-6">
           <div className="relative">
@@ -95,7 +95,7 @@ export function ProviderComingSoon({ provider, onBack }: ProviderComingSoonProps
           {content.badge}
         </Badge>
 
-        <h2 className="font-display text-3xl md:text-4xl font-bold mb-3">
+        <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mb-3">
           {content.title}
         </h2>
 

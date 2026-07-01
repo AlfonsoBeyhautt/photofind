@@ -222,14 +222,14 @@ export function ReferenceCamera({
           onError={onError}
         />
       ) : (
-      <div className="relative rounded-xl overflow-hidden aspect-[4/3] bg-bg-elevated border border-border">
+      <div className="relative rounded-xl overflow-hidden aspect-[4/3] max-h-[min(70vw,320px)] sm:max-h-none bg-bg-elevated border border-border">
         {showLive ? (
           <>
             <video
               ref={videoRef}
               playsInline
               muted
-              className={cn('w-full h-full object-cover', !ready && 'opacity-0')}
+              className={cn('w-full h-full object-cover scale-x-[-1]', !ready && 'opacity-0')}
             />
             {!ready && !captureError && (
               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-accent/10 to-violet/10">
@@ -241,14 +241,14 @@ export function ReferenceCamera({
                 <div className="w-24 h-24 rounded-full border-2 border-dashed border-accent/40" />
               </div>
             )}
-            <div className="absolute bottom-2 left-2 right-2 flex justify-center gap-2">
+            <div className="absolute bottom-3 left-2 right-2 flex justify-center gap-2 safe-bottom">
               <Button
                 type="button"
-                size="sm"
+                size="md"
                 variant="primary"
                 disabled={!ready || loading}
                 onClick={() => void capture()}
-                className="pointer-events-auto"
+                className="pointer-events-auto w-full sm:w-auto"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
                 {loading ? 'Validando…' : 'Capturar selfie'}
@@ -279,7 +279,7 @@ export function ReferenceCamera({
       {(captureError || showValidatedPreview) && !loading && !selection && (
         <Button
           type="button"
-          size="sm"
+          size="md"
           variant="outline"
           className="w-full"
           onClick={() => resetToLive()}

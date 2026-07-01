@@ -100,14 +100,14 @@ export function PhotoLightbox({ images, initialIndex, onClose }: PhotoLightboxPr
         aria-label={`Visor de fotos: ${current.name}`}
       >
         <header
-          className="flex items-center justify-between gap-3 px-4 py-3 md:px-6 shrink-0 border-b border-white/10 bg-black/80 backdrop-blur-md safe-top"
+          className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3 md:px-6 shrink-0 border-b border-white/10 bg-black/80 backdrop-blur-md safe-top"
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="text-sm text-white/90 font-mono truncate">
-            Foto {index + 1} de {images.length}
+          <span className="text-xs sm:text-sm text-white/90 font-mono truncate min-w-0">
+            {index + 1}/{images.length}
           </span>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
             <LightboxButton
               label="Alejar"
               onClick={() => setZoom((z) => Math.max(z - 0.25, 1))}
@@ -132,7 +132,7 @@ export function PhotoLightbox({ images, initialIndex, onClose }: PhotoLightboxPr
         </header>
 
         <div
-          className="relative flex-1 flex items-center justify-center px-12 md:px-20 overflow-hidden min-h-0"
+          className="relative flex-1 flex items-center justify-center px-4 sm:px-12 md:px-20 overflow-hidden min-h-0"
           onClick={onClose}
         >
           <NavButton direction="prev" onClick={goPrev} />
@@ -191,7 +191,7 @@ export function PhotoLightbox({ images, initialIndex, onClose }: PhotoLightboxPr
           <NavButton direction="next" onClick={goNext} />
         </div>
 
-        <footer className="text-center text-xs text-white/50 px-6 py-3 truncate shrink-0 border-t border-white/10 bg-black/80">
+        <footer className="text-center text-xs text-white/50 px-4 sm:px-6 py-3 truncate shrink-0 border-t border-white/10 bg-black/80 safe-bottom">
           {current.name}
         </footer>
       </motion.div>
@@ -218,7 +218,7 @@ function LightboxButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors',
+        'p-2.5 sm:p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center',
         disabled && 'opacity-40 pointer-events-none',
       )}
     >
@@ -245,9 +245,9 @@ function NavButton({
         onClick()
       }}
       className={cn(
-        'absolute top-1/2 -translate-y-1/2 z-10 p-2 md:p-3 rounded-full',
+        'absolute top-1/2 -translate-y-1/2 z-10 p-3 md:p-3 rounded-full min-h-[44px] min-w-[44px] inline-flex items-center justify-center',
         'bg-black/50 hover:bg-black/70 text-white/90 hover:text-white transition-colors',
-        direction === 'prev' ? 'left-2 md:left-4' : 'right-2 md:right-4',
+        direction === 'prev' ? 'left-1 sm:left-2 md:left-4' : 'right-1 sm:right-2 md:right-4',
       )}
     >
       <Icon className="w-6 h-6 md:w-8 md:h-8" />

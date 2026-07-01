@@ -17,11 +17,11 @@ export function ProfilePage() {
       <GlowOrbs />
       <Navbar />
 
-      <div className="relative z-10 px-6 pt-28 pb-16 max-w-4xl mx-auto">
+      <div className="relative z-10 px-4 sm:px-6 page-top pb-16 safe-bottom max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-2xl p-8 mb-8 glow-blue"
+          className="glass rounded-2xl p-5 sm:p-8 mb-8 glow-blue"
         >
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <img
@@ -41,17 +41,17 @@ export function ProfilePage() {
                 </Badge>
               )}
             </div>
-            <div className="flex flex-col gap-2">
-              <Link to="/dashboard">
-                <Button variant="outline" size="sm">
+            <div className="flex flex-col gap-2 w-full sm:w-auto">
+              <Link to="/dashboard" className="w-full sm:w-auto">
+                <Button variant="outline" size="md" className="w-full sm:w-auto">
                   <LayoutDashboard className="w-4 h-4" />
                   Dashboard
                 </Button>
               </Link>
-              <Link to="/">
-                <Button variant="primary" size="sm">Nueva búsqueda</Button>
+              <Link to="/" className="w-full sm:w-auto">
+                <Button variant="primary" size="md" className="w-full sm:w-auto">Nueva búsqueda</Button>
               </Link>
-              <Button variant="ghost" size="sm" onClick={() => void logout()}>
+              <Button variant="ghost" size="md" className="w-full sm:w-auto" onClick={() => void logout()}>
                 <LogOut className="w-4 h-4" />
                 Cerrar sesión
               </Button>

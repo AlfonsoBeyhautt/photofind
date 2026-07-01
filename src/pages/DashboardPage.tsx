@@ -58,13 +58,13 @@ export function DashboardPage() {
       <GlowOrbs />
       <Navbar />
 
-      <div className="relative z-10 px-6 pt-28 pb-16 max-w-6xl mx-auto">
+      <div className="relative z-10 px-4 sm:px-6 page-top pb-16 safe-bottom max-w-6xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">
+          <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mb-2">
             Hola, {user?.name.split(' ')[0] ?? 'Usuario'} 👋
           </h1>
           <p className="text-text-muted">Tu cuenta y actividad en PhotoFind</p>
@@ -101,8 +101,8 @@ export function DashboardPage() {
                 </p>
               )}
             </div>
-            <Link to="/" className="shrink-0">
-              <Button size="lg">
+            <Link to="/" className="w-full sm:w-auto shrink-0">
+              <Button size="lg" className="w-full sm:w-auto">
                 <Plus className="w-4 h-4" />
                 Nueva búsqueda
               </Button>

@@ -92,17 +92,17 @@ function PersonGalleryModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-6 bg-black/70 backdrop-blur-sm safe-top safe-bottom safe-x"
       onClick={onClose}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 24 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl max-h-[85vh] overflow-hidden glass rounded-2xl"
+        className="w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden glass rounded-none sm:rounded-2xl flex flex-col"
       >
-        <div className="flex items-center justify-between p-6 border-b border-border-subtle">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-4">
             <img
               src={`https://i.pravatar.cc/80?img=${person.avatarSeed}`}
@@ -115,15 +115,17 @@ function PersonGalleryModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-xl hover:bg-white/5 transition-colors"
+            className="p-2.5 rounded-xl hover:bg-white/5 transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
+            aria-label="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {photos.map((url, i) => (
               <motion.div
                 key={i}

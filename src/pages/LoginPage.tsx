@@ -58,7 +58,7 @@ export function LoginPage() {
             required
           />
           <div className="mt-2 text-right">
-            <Link to="/recuperar" className="text-xs text-accent-bright hover:underline">
+            <Link to="/recuperar" className="inline-flex items-center min-h-[44px] text-sm text-accent-bright hover:underline py-2">
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
@@ -82,7 +82,7 @@ export function LoginPage() {
 
       <p className="text-center text-sm text-text-muted mt-6">
         ¿No tenés cuenta?{' '}
-        <Link to="/registro" className="text-accent-bright hover:underline font-medium">
+        <Link to="/registro" className="inline-flex items-center min-h-[44px] text-accent-bright hover:underline font-medium py-1">
           Crear cuenta gratis
         </Link>
       </p>
