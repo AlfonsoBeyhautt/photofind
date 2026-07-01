@@ -56,6 +56,11 @@ import {
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
 } from './auth/authHandler'
+import {
+  handleAdminAddAdminRequest,
+  handleAdminListAdminsRequest,
+  handleAdminMetricsRequest,
+} from './admin/adminHandler'
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -126,6 +131,28 @@ export function driveApiPlugin(): Plugin {
             }
           } catch {
             sendJson(res, 500, { ok: false, error: { code: 'AUTH_FAILED', message: 'No pudimos completar la solicitud.' } })
+            return
+          }
+        }
+
+        if (req.url?.startsWith('/api/admin/')) {
+          try {
+            const body = req.method === 'GET' ? '' : await readBody(req)
+
+            if (req.url === '/api/admin/metrics' && req.method === 'GET') {
+              await handleAdminMetricsRequest(req, res)
+              return
+            }
+            if (req.url === '/api/admin/admins' && req.method === 'GET') {
+              await handleAdminListAdminsRequest(req, res)
+              return
+            }
+            if (req.url === '/api/admin/admins' && req.method === 'POST') {
+              await handleAdminAddAdminRequest(req, res, body)
+              return
+            }
+          } catch {
+            sendJson(res, 500, { ok: false, error: { code: 'ADMIN_FAILED', message: 'No pudimos completar la solicitud.' } })
             return
           }
         }

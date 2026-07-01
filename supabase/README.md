@@ -32,6 +32,25 @@ Luego ejecutá también:
 
 Esto crea la tabla `public.search_history` para búsquedas y álbumes procesados en el dashboard.
 
+Migraciones adicionales (en orden): `003_album_collections.sql`, `004_album_processing_jobs.sql`, `005_person_grouping.sql`, `006_album_event_category.sql`, `007_admin_users.sql`.
+
+## 3b. Panel de administración (`/admin`)
+
+1. Ejecutá `007_admin_users.sql`.
+2. Insertá tu cuenta como admin (reemplazá el email):
+
+```sql
+INSERT INTO public.admin_users (user_id, email, notes)
+SELECT id, email, 'bootstrap'
+FROM auth.users
+WHERE email = 'tu@email.com'
+LIMIT 1;
+```
+
+Alternativa: definí `PHOTOFIND_BOOTSTRAP_ADMIN_EMAIL=tu@email.com` en el backend. Si `admin_users` está vacía, el primer acceso autorizado crea el registro automáticamente (solo si ya existe la cuenta en Auth).
+
+La ruta `/admin` no aparece en la navegación. Solo usuarios en `admin_users` pueden cargar las APIs `/api/admin/*`.
+
 ## 4. Auth (registro sin confirmación de email — recomendado para MVP)
 
 **Authentication → Providers → Email** → desactivá **Confirm email** si querés login inmediato tras registrarse.

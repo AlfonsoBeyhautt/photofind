@@ -58,6 +58,11 @@ import {
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
 } from './auth/authHandler'
+import {
+  handleAdminAddAdminRequest,
+  handleAdminListAdminsRequest,
+  handleAdminMetricsRequest,
+} from './admin/adminHandler'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -453,6 +458,34 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   app.post('/api/auth/facial-profile/use', async (req, res) => {
     await handleUseFacialProfileRequest(req, res)
+  })
+
+  app.get('/api/admin/metrics', async (req, res) => {
+    try {
+      await handleAdminMetricsRequest(req, res)
+    } catch (err) {
+      console.error('[PhotoFind:Backend] admin_metrics_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ADMIN_METRICS_FAILED', message: 'No pudimos cargar las métricas.' },
+      })
+    }
+  })
+
+  app.get('/api/admin/admins', async (req, res) => {
+    await handleAdminListAdminsRequest(req, res)
+  })
+
+  app.post('/api/admin/admins', async (req, res) => {
+    try {
+      await handleAdminAddAdminRequest(req, res, JSON.stringify(req.body ?? {}))
+    } catch (err) {
+      console.error('[PhotoFind:Backend] admin_add_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'ADMIN_GRANT_FAILED', message: 'No pudimos autorizar al administrador.' },
+      })
+    }
   })
 
   if (serveStatic) {
