@@ -16,6 +16,29 @@ export interface FacialProfileMeta {
   source: ReferenceSource
   createdAt: string
   updatedAt: string
+  referenceCount?: number
+  hasAdvancedProfile?: boolean
+}
+
+export type FacialReferenceType =
+  | 'primary'
+  | 'frontal'
+  | 'left'
+  | 'right'
+  | 'smile'
+  | 'lighting'
+  | 'extra'
+
+export interface FacialProfileReferencePublic {
+  id: string
+  referenceType: FacialReferenceType
+  confidence: number
+  qualityTier: ReferenceQualityTier
+  qualityWarning?: string
+  captureMethod: 'upload' | 'camera' | 'video_frame'
+  isPrimary: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export type FacialProfileState =
@@ -46,6 +69,8 @@ export type AuthResponse = AuthSuccessResponse | AuthErrorResponse
 export interface UseFacialProfileSuccess {
   ok: true
   referenceToken: string
+  mode: 'single' | 'advanced'
+  referenceCount: number
   faceBox: FaceBox
   confidence: number
   qualityTier: ReferenceQualityTier

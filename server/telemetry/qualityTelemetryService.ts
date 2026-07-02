@@ -66,6 +66,11 @@ export async function recordCollectionSearchOutcome(input: {
   eventCategory?: string | null
   failed?: boolean
   fallbackReason?: string | null
+  profileMode?: string | null
+  referenceCount?: number | null
+  multiRefExtraMatches?: number | null
+  matchesByReference?: Record<string, number> | null
+  awsSearchFacesByImageCalls?: number
 }): Promise<void> {
   if (!input.runId) return
 
@@ -90,11 +95,15 @@ export async function recordCollectionSearchOutcome(input: {
     similarityAvg: avgSimilarity(similarities),
     msSearch: input.msSearch,
     msIndexing: input.msIndexing,
-    awsSearchFacesByImageCalls: 1,
+    awsSearchFacesByImageCalls: input.awsSearchFacesByImageCalls ?? 1,
     eventCategory: input.eventCategory,
     outcome: input.failed ? 'failed' : 'completed',
     fallbackReason: input.fallbackReason,
     completedAt: now,
+    profileMode: input.profileMode,
+    referenceCount: input.referenceCount,
+    multiRefExtraMatches: input.multiRefExtraMatches,
+    matchesByReference: input.matchesByReference,
   })
 }
 

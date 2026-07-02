@@ -102,6 +102,10 @@ export async function upsertQualityRun(input: {
   completedAt?: string | null
   repeatSearch?: boolean
   retriedReference?: boolean
+  profileMode?: string | null
+  referenceCount?: number | null
+  multiRefExtraMatches?: number | null
+  matchesByReference?: Record<string, number> | null
 }): Promise<void> {
   const db = client()
   if (!db) return
@@ -135,6 +139,10 @@ export async function upsertQualityRun(input: {
     completed_at: input.completedAt ?? null,
     repeat_search: input.repeatSearch ?? false,
     retried_reference: input.retriedReference ?? false,
+    profile_mode: input.profileMode ?? null,
+    reference_count: input.referenceCount ?? null,
+    multi_ref_extra_matches: input.multiRefExtraMatches ?? null,
+    matches_by_reference: input.matchesByReference ?? null,
   }
 
   const { error } = await db

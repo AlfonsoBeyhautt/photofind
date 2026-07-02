@@ -176,6 +176,13 @@ export async function deleteFacialProfile(userId: string): Promise<boolean> {
     throw new Error('PROFILE_DELETE_FAILED')
   }
 
+  try {
+    const { deleteAllFacialProfileReferences } = await import('./facialProfileReferenceStore')
+    await deleteAllFacialProfileReferences(userId)
+  } catch (err) {
+    console.warn('[PhotoFind:Supabase] reference_cleanup_on_delete', err instanceof Error ? err.message : err)
+  }
+
   return true
 }
 

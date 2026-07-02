@@ -2,7 +2,9 @@ import type {
   AuthMeResponse,
   DashboardData,
   FacialProfileMeta,
+  FacialProfileReferencePublic,
   FacialProfileState,
+  FacialReferenceType,
   RecordSearchBody,
   UseFacialProfileResponse,
 } from '../../types/auth'
@@ -25,6 +27,9 @@ const AUTH_MESSAGES: Record<string, string> = {
   SUPABASE_STORAGE_FAILED: 'No pudimos guardar la foto en Supabase Storage.',
   SUPABASE_PROFILE_METADATA_FAILED: 'No pudimos guardar los datos del perfil facial.',
   PROFILE_SAVE_FAILED: 'No pudimos guardar el perfil facial.',
+  PROFILE_REFERENCES_LIMIT: 'Ya tenés el máximo de referencias guardadas.',
+  PROFILE_REFERENCE_LAST: 'No podés borrar tu única referencia.',
+  PROFILE_REFERENCE_NOT_FOUND: 'No encontramos esa referencia.',
   IMAGE_NORMALIZATION_FAILED: 'No pudimos procesar la imagen en el servidor.',
 }
 
@@ -221,8 +226,59 @@ export async function deleteFacialProfile(): Promise<{ ok: boolean; facialProfil
   return authDeleteJson('/api/auth/facial-profile')
 }
 
-export async function useFacialProfile(): Promise<UseFacialProfileResponse | { ok: false; error: { code: string; message: string } }> {
-  return authPostJson<UseFacialProfileResponse>('/api/auth/facial-profile/use')
+export async function useFacialProfile(
+  options?: { mode?: 'single' | 'advanced' | 'auto' },
+): Promise<UseFacialProfileResponse | { ok: false; error: { code: string; message: string } }> {
+  return authPostJson<UseFacialProfileResponse>('/api/auth/facial-profile/use', {
+    mode: options?.mode ?? 'auto',
+  })
+}
+
+export async function fetchProfileReferences(): Promise<
+  | { ok: true; references: FacialProfileReferencePublic[]; hasAdvancedProfile: boolean }
+  | { ok: false; error: { code: string; message: string } }
+> {
+  return authGetJson('/api/auth/facial-profile/references')
+}
+
+export type AddProfileReferenceResponse =
+  | { ok: true; reference: FacialProfileReferencePublic }
+  | { ok: true; needsSelection: true; detectionToken: string; faces: DetectedFace[]; expiresAt: string }
+  | { ok: false; error: { code: string; message: string } }
+
+export async function addProfileReference(
+  dataBase64: string,
+  mimeType: string,
+  source: ReferenceSource,
+  referenceType: FacialReferenceType,
+): Promise<AddProfileReferenceResponse> {
+  return authPostJson('/api/auth/facial-profile/references', {
+    dataBase64,
+    mimeType,
+    source,
+    referenceType,
+  }) as Promise<AddProfileReferenceResponse>
+}
+
+export async function addProfileReferenceFromSelection(
+  detectionToken: string,
+  faceIndex: number,
+  referenceType: FacialReferenceType,
+): Promise<AddProfileReferenceResponse> {
+  return authPostJson('/api/auth/facial-profile/references', {
+    detectionToken,
+    faceIndex,
+    referenceType,
+  }) as Promise<AddProfileReferenceResponse>
+}
+
+export async function deleteProfileReference(
+  referenceId: string,
+): Promise<
+  | { ok: true; references: FacialProfileReferencePublic[]; hasAdvancedProfile: boolean }
+  | { ok: false; error: { code: string; message: string } }
+> {
+  return authDeleteJson(`/api/auth/facial-profile/references/${encodeURIComponent(referenceId)}`)
 }
 
 export type SaveFacialProfileResponse =

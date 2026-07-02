@@ -37,3 +37,10 @@ export const FACIAL_PROFILES_BUCKET = 'facial-profiles'
 export function facialProfileStoragePath(userId: string): string {
   return `${userId}/profile.jpg`
 }
+
+export function facialProfileReferenceStoragePath(userId: string, referenceId: string): string {
+  return `${userId}/refs/${referenceId}.jpg`
+}
+
+/** Máximo de referencias activas por usuario (perfil avanzado). */
+export const MAX_FACIAL_PROFILE_REFERENCES = 6

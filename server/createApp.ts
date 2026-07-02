@@ -59,6 +59,9 @@ import {
   handleDeleteAlbumSearchHistoryRequest,
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
+  handleListFacialProfileReferencesRequest,
+  handleAddFacialProfileReferenceRequest,
+  handleDeleteFacialProfileReferenceRequest,
 } from './auth/authHandler'
 import {
   handleAdminAddAdminRequest,
@@ -471,7 +474,28 @@ export function createApp(options: CreateAppOptions = {}): Express {
   })
 
   app.post('/api/auth/facial-profile/use', async (req, res) => {
-    await handleUseFacialProfileRequest(req, res)
+    await handleUseFacialProfileRequest(req, res, JSON.stringify(req.body ?? {}))
+  })
+
+  app.get('/api/auth/facial-profile/references', async (req, res) => {
+    await handleListFacialProfileReferencesRequest(req, res)
+  })
+
+  app.post('/api/auth/facial-profile/references', async (req, res) => {
+    try {
+      await handleAddFacialProfileReferenceRequest(req, res, JSON.stringify(req.body ?? {}))
+    } catch (err) {
+      console.error('[PhotoFind:Backend] facial_profile_reference_add_unhandled', err instanceof Error ? err.message : err)
+      res.status(500).json({
+        ok: false,
+        error: { code: 'PROFILE_REFERENCE_SAVE_FAILED', message: 'No pudimos guardar la referencia.' },
+      })
+    }
+  })
+
+  app.delete('/api/auth/facial-profile/references/:referenceId', async (req, res) => {
+    const referenceId = typeof req.params.referenceId === 'string' ? req.params.referenceId : ''
+    await handleDeleteFacialProfileReferenceRequest(req, res, referenceId)
   })
 
   app.get('/api/admin/metrics', async (req, res) => {

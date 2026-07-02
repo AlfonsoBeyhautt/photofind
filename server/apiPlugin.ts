@@ -57,6 +57,9 @@ import {
   handleDeleteAlbumSearchHistoryRequest,
   handleSaveFacialProfileRequest,
   handleUseFacialProfileRequest,
+  handleListFacialProfileReferencesRequest,
+  handleAddFacialProfileReferenceRequest,
+  handleDeleteFacialProfileReferenceRequest,
 } from './auth/authHandler'
 import {
   handleAdminAddAdminRequest,
@@ -128,8 +131,23 @@ export function driveApiPlugin(): Plugin {
               await handleRecordSearchRequest(req, res, body)
               return
             }
+            if (req.url.startsWith('/api/auth/facial-profile/references/') && req.method === 'DELETE') {
+              const referenceId = decodeURIComponent(
+                req.url.replace('/api/auth/facial-profile/references/', '').split('?')[0],
+              )
+              await handleDeleteFacialProfileReferenceRequest(req, res, referenceId)
+              return
+            }
+            if (req.url === '/api/auth/facial-profile/references' && req.method === 'GET') {
+              await handleListFacialProfileReferencesRequest(req, res)
+              return
+            }
+            if (req.url === '/api/auth/facial-profile/references' && req.method === 'POST') {
+              await handleAddFacialProfileReferenceRequest(req, res, body)
+              return
+            }
             if (req.url.startsWith('/api/auth/facial-profile/use') && req.method === 'POST') {
-              await handleUseFacialProfileRequest(req, res)
+              await handleUseFacialProfileRequest(req, res, body)
               return
             }
             if (req.url === '/api/auth/facial-profile' && req.method === 'GET') {

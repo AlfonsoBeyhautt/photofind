@@ -6,6 +6,7 @@ import { ErrorBanner } from '../ui/ErrorBanner'
 import { useAuth } from '../../context/AuthContext'
 import { deleteFacialProfile } from '../../lib/auth/authClient'
 import { FacialProfileSetup } from './FacialProfileSetup'
+import { FacialProfileAdvancedSection } from './FacialProfileAdvancedSection'
 import { cn } from '../../lib/utils'
 
 interface FacialProfileSectionProps {
@@ -20,6 +21,12 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [referenceCount, setReferenceCount] = useState(
+    facialProfile.hasProfile ? (facialProfile.referenceCount ?? 1) : 0,
+  )
+  const [hasAdvancedProfile, setHasAdvancedProfile] = useState(
+    facialProfile.hasProfile ? (facialProfile.hasAdvancedProfile ?? false) : false,
+  )
 
   const handleDelete = async () => {
     if (!confirm('¿Borrar tu perfil facial? No podrás reutilizarlo en búsquedas hasta crear uno nuevo.')) return
@@ -32,6 +39,8 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
         return
       }
       setFacialProfile(result.facialProfile)
+      setReferenceCount(0)
+      setHasAdvancedProfile(false)
       setEditing(false)
     } catch {
       setError('No pudimos borrar el perfil facial.')
@@ -55,29 +64,47 @@ export function FacialProfileSection({ compact }: FacialProfileSectionProps) {
       )}
 
       {facialProfile.hasProfile && !editing ? (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-emerald-400 font-medium">Perfil facial guardado</p>
-            <p className="text-xs text-text-dim mt-1">
-              Creado {new Date(facialProfile.createdAt).toLocaleDateString('es-AR')}
-              {' · '}
-              Actualizado {new Date(facialProfile.updatedAt).toLocaleDateString('es-AR')}
-            </p>
-            {facialProfile.qualityWarning && (
-              <p className="text-xs text-amber-300 mt-1">{facialProfile.qualityWarning}</p>
-            )}
+        <>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-emerald-400 font-medium">
+                Perfil facial guardado
+                {hasAdvancedProfile && ` · ${referenceCount} referencias`}
+              </p>
+              <p className="text-xs text-text-dim mt-1">
+                Creado {new Date(facialProfile.createdAt).toLocaleDateString('es-AR')}
+                {' · '}
+                Actualizado {new Date(facialProfile.updatedAt).toLocaleDateString('es-AR')}
+              </p>
+              {facialProfile.qualityWarning && (
+                <p className="text-xs text-amber-300 mt-1">{facialProfile.qualityWarning}</p>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+              <Button variant="outline" size="md" className="w-full sm:w-auto" onClick={() => setEditing(true)} disabled={deleting}>
+                <RefreshCw className="w-4 h-4" />
+                Reemplazar
+              </Button>
+              <Button variant="ghost" size="md" className="w-full sm:w-auto" onClick={handleDelete} disabled={deleting}>
+                <Trash2 className="w-4 h-4" />
+                {deleting ? 'Borrando…' : 'Borrar'}
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-            <Button variant="outline" size="md" className="w-full sm:w-auto" onClick={() => setEditing(true)} disabled={deleting}>
-              <RefreshCw className="w-4 h-4" />
-              Reemplazar
-            </Button>
-            <Button variant="ghost" size="md" className="w-full sm:w-auto" onClick={handleDelete} disabled={deleting}>
-              <Trash2 className="w-4 h-4" />
-              {deleting ? 'Borrando…' : 'Borrar'}
-            </Button>
-          </div>
-        </div>
+          <FacialProfileAdvancedSection
+            onAdvancedProfileChange={(advanced, count) => {
+              setHasAdvancedProfile(advanced)
+              setReferenceCount(count)
+              if (facialProfile.hasProfile) {
+                setFacialProfile({
+                  ...facialProfile,
+                  referenceCount: count,
+                  hasAdvancedProfile: advanced,
+                })
+              }
+            }}
+          />
+        </>
       ) : (
         <FacialProfileSetup
           onSaved={(profile) => {

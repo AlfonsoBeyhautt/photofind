@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { getConfigStatus } from '../config/serverHealth'
 import { getAuthenticatedUser } from './supabaseAuth'
 import type { PublicUser } from './types'
-import { getFacialProfileMeta, deleteFacialProfile } from '../supabase/facialProfileStore'
+import { getUserFacialProfileMeta, removeUserFacialProfile } from './facialProfileService'
 import { SupabaseConfigError } from '../supabase/client'
 import {
   buildProcessedAlbums,
@@ -68,7 +68,7 @@ export async function handleMeRequest(req: IncomingMessage, res: ServerResponse)
       return
     }
 
-    const facialProfile = await getFacialProfileMeta(user.id)
+    const facialProfile = await getUserFacialProfileMeta(user.id)
     const operatorAccess = await getOperatorAccessForUser(user.id)
     sendJson(res, 200, { ok: true, user, facialProfile, ...operatorAccess })
   } catch (err) {
@@ -95,7 +95,7 @@ export async function handleGetFacialProfileRequest(req: IncomingMessage, res: S
   const user = await requireUser(req, res)
   if (!user) return
   try {
-    const facialProfile = await getFacialProfileMeta(user.id)
+    const facialProfile = await getUserFacialProfileMeta(user.id)
     sendJson(res, 200, { ok: true, facialProfile })
   } catch (err) {
     logAuthMeError(err, 'facial_profile_get')
@@ -142,7 +142,7 @@ export async function handleDeleteFacialProfileRequest(req: IncomingMessage, res
   if (!user) return
 
   try {
-    await deleteFacialProfile(user.id)
+    await removeUserFacialProfile(user.id)
     sendJson(res, 200, { ok: true, facialProfile: { hasProfile: false } })
   } catch (err) {
     logAuthMeError(err, 'facial_profile_delete')
@@ -153,13 +153,93 @@ export async function handleDeleteFacialProfileRequest(req: IncomingMessage, res
   }
 }
 
-export async function handleUseFacialProfileRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+export async function handleUseFacialProfileRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  rawBody?: string,
+): Promise<void> {
   const user = await requireUser(req, res)
   if (!user) return
 
+  let mode: import('./facialProfileReferenceService').ProfileSearchMode = 'auto'
+  if (rawBody?.trim()) {
+    try {
+      const body = JSON.parse(rawBody) as { mode?: string }
+      if (body.mode === 'single' || body.mode === 'advanced' || body.mode === 'auto') {
+        mode = body.mode
+      }
+    } catch {
+      // ignore invalid body — default auto
+    }
+  }
+
   const { useFacialProfileForSearch } = await import('./facialProfileService')
-  const result = await useFacialProfileForSearch(user.id)
+  const result = await useFacialProfileForSearch(user.id, mode)
   sendJson(res, result.ok ? 200 : 404, result)
+}
+
+export async function handleListFacialProfileReferencesRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  try {
+    const { listUserFacialProfileReferences } = await import('./facialProfileReferenceService')
+    const result = await listUserFacialProfileReferences(user.id)
+    sendJson(res, 200, { ok: true, ...result })
+  } catch (err) {
+    logAuthMeError(err, 'facial_profile_references_list')
+    sendJson(res, 500, {
+      ok: false,
+      error: { code: 'PROFILE_REFERENCES_FETCH_FAILED', message: 'No pudimos cargar las referencias.' },
+    })
+  }
+}
+
+export async function handleAddFacialProfileReferenceRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  rawBody: string,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  let body: import('./facialProfileReferenceService').SaveFacialProfileReferenceBody
+  try {
+    body = JSON.parse(rawBody) as import('./facialProfileReferenceService').SaveFacialProfileReferenceBody
+  } catch {
+    sendJson(res, 400, { ok: false, error: { code: 'INVALID_REQUEST', message: 'Solicitud inválida.' } })
+    return
+  }
+
+  const { addUserFacialProfileReference } = await import('./facialProfileReferenceService')
+  const result = await addUserFacialProfileReference(user.id, body)
+  if (!result.ok) {
+    sendJson(res, 400, result)
+    return
+  }
+
+  if ('needsSelection' in result && result.needsSelection) {
+    sendJson(res, 200, result)
+    return
+  }
+
+  sendJson(res, 200, result)
+}
+
+export async function handleDeleteFacialProfileReferenceRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  referenceId: string,
+): Promise<void> {
+  const user = await requireUser(req, res)
+  if (!user) return
+
+  const { removeUserFacialProfileReference } = await import('./facialProfileReferenceService')
+  const result = await removeUserFacialProfileReference(user.id, referenceId)
+  sendJson(res, result.ok ? 200 : 400, result)
 }
 
 interface RecordSearchBody {
@@ -224,7 +304,7 @@ export async function handleDashboardRequest(req: IncomingMessage, res: ServerRe
   if (!user) return
 
   try {
-    const facialProfile = await getFacialProfileMeta(user.id)
+    const facialProfile = await getUserFacialProfileMeta(user.id)
     const recentSearches = await listRecentSearches(user.id, 20)
     let processedAlbums = buildProcessedAlbums(recentSearches)
     const categoryByHash = await getEventCategoriesByUrlHashes(

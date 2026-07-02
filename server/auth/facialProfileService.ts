@@ -4,14 +4,18 @@ import {
   selectReferenceFace,
   validateReferenceImage,
 } from '../recognize/referenceService'
-import { saveReference } from '../recognize/referenceStore'
 import {
   deleteFacialProfile,
   getFacialProfile,
-  getFacialProfileMeta,
-  readFacialProfileImage,
   saveFacialProfile,
 } from '../supabase/facialProfileStore'
+import { countActiveFacialProfileReferences } from '../supabase/facialProfileReferenceStore'
+import {
+  buildProfileSearchToken,
+  removeAllUserFacialReferences,
+  syncPrimaryOnProfileSave,
+  type ProfileSearchMode,
+} from './facialProfileReferenceService'
 
 /**
  * Facial profile storage — Supabase (private Storage + Postgres with RLS).
@@ -51,6 +55,14 @@ export async function saveUserFacialProfile(userId: string, body: SaveFacialProf
 
     try {
       const profile = await saveFacialProfile(userId, {
+        buffer: temp.buffer,
+        source: temp.source,
+        faceBox: selected.faceBox,
+        confidence: selected.confidence,
+        qualityTier: selected.qualityTier,
+        qualityWarning: selected.qualityWarning,
+      })
+      await syncPrimaryOnProfileSave(userId, {
         buffer: temp.buffer,
         source: temp.source,
         faceBox: selected.faceBox,
@@ -127,6 +139,14 @@ export async function saveUserFacialProfile(userId: string, body: SaveFacialProf
       qualityTier: validated.qualityTier,
       qualityWarning: validated.qualityWarning,
     })
+    await syncPrimaryOnProfileSave(userId, {
+      buffer: normalized.buffer,
+      source,
+      faceBox: validated.faceBox,
+      confidence: validated.confidence,
+      qualityTier: validated.qualityTier,
+      qualityWarning: validated.qualityWarning,
+    })
     return { ok: true as const, profile }
   } catch (err) {
     const code = err instanceof Error ? err.message : 'PROFILE_SAVE_FAILED'
@@ -145,49 +165,32 @@ export async function saveUserFacialProfile(userId: string, body: SaveFacialProf
 }
 
 export async function getUserFacialProfileMeta(userId: string) {
-  return getFacialProfileMeta(userId)
-}
-
-export async function removeUserFacialProfile(userId: string): Promise<boolean> {
-  return deleteFacialProfile(userId)
-}
-
-/** Fresh short-lived referenceToken for album search (15 min TTL in referenceStore). */
-export async function useFacialProfileForSearch(userId: string) {
   const row = await getFacialProfile(userId)
-  if (!row) {
-    return {
-      ok: false as const,
-      error: { code: 'PROFILE_NOT_FOUND', message: 'Todavía no creaste tu perfil facial.' },
-    }
-  }
+  if (!row) return { hasProfile: false as const }
 
-  const buffer = await readFacialProfileImage(userId)
-  if (!buffer) {
-    await deleteFacialProfile(userId)
-    return {
-      ok: false as const,
-      error: { code: 'PROFILE_NOT_FOUND', message: 'Tu perfil facial ya no está disponible.' },
-    }
-  }
+  const referenceCount = await countActiveFacialProfileReferences(userId)
+  const effectiveCount = referenceCount > 0 ? referenceCount : 1
 
-  const stored = saveReference({
-    buffer,
-    contentType: 'image/jpeg',
-    source: 'profile',
+  return {
+    hasProfile: true as const,
     faceBox: row.face_box,
     confidence: row.confidence,
     qualityTier: row.quality_tier,
     qualityWarning: row.quality_warning ?? undefined,
-  })
-
-  return {
-    ok: true as const,
-    referenceToken: stored.token,
-    faceBox: stored.faceBox,
-    confidence: stored.confidence,
-    qualityTier: stored.qualityTier,
-    qualityWarning: stored.qualityWarning,
-    expiresAt: new Date(stored.expiresAt).toISOString(),
+    source: row.source,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    referenceCount: effectiveCount,
+    hasAdvancedProfile: effectiveCount >= 2,
   }
+}
+
+export async function removeUserFacialProfile(userId: string): Promise<boolean> {
+  await removeAllUserFacialReferences(userId)
+  return deleteFacialProfile(userId)
+}
+
+/** Fresh short-lived referenceToken for album search (15 min TTL in referenceStore). */
+export async function useFacialProfileForSearch(userId: string, mode: ProfileSearchMode = 'auto') {
+  return buildProfileSearchToken(userId, mode)
 }

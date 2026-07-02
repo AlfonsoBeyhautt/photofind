@@ -6,7 +6,7 @@ import {
   runParallelImageWork,
 } from './parallelImageFetch'
 import { canUseRekognition, compareFaces } from './rekognitionClient'
-import { getReference } from './referenceStore'
+import { getReferencesForSearch } from './referenceStore'
 import type { QualityTelemetryInput } from '../telemetry/qualityTelemetryTypes'
 import { recordCompareFallbackOutcome } from '../telemetry/qualityTelemetryService'
 
@@ -91,8 +91,8 @@ export async function compareAlbumToReference(
     return fail('AWS_CREDENTIALS_MISSING')
   }
 
-  const reference = getReference(referenceToken)
-  if (!reference) {
+  const references = getReferencesForSearch(referenceToken)
+  if (references.length === 0) {
     void recordCompareFallbackOutcome({
       runId: qualityTelemetry?.runId,
       userId: qualityTelemetry?.userId,
@@ -109,6 +109,9 @@ export async function compareAlbumToReference(
     })
     return fail('RECOGNITION_REFERENCE_EXPIRED')
   }
+
+  const referenceBuffers = references.map((r) => r.buffer)
+  const referenceCount = referenceBuffers.length
 
   const albumTotal = images.length
   const toAnalyze = images.slice(0, COMPARE_PHASE_MAX_PHOTOS)
@@ -129,9 +132,17 @@ export async function compareAlbumToReference(
     toAnalyze,
     async (image, targetBytes) => {
       try {
-        const result = await compareFaces(reference.buffer, targetBytes)
-        if (result) {
-          return { kind: 'match', imageId: image.id, similarity: result.similarity }
+        let bestSimilarity = 0
+        let matched = false
+        for (const refBuffer of referenceBuffers) {
+          const result = await compareFaces(refBuffer, targetBytes)
+          if (result && result.similarity > bestSimilarity) {
+            bestSimilarity = result.similarity
+            matched = true
+          }
+        }
+        if (matched) {
+          return { kind: 'match', imageId: image.id, similarity: bestSimilarity }
         }
         return { kind: 'no_match' }
       } catch (error) {
@@ -174,7 +185,7 @@ export async function compareAlbumToReference(
       albumUrl: qualityTelemetry?.albumUrl,
       imagesAnalyzed: facesCompared,
       matches,
-      compareFacesCalls: facesCompared,
+      compareFacesCalls: facesCompared * referenceCount,
       msSearch: Date.now() - searchStarted,
       referenceSource: qualityTelemetry?.referenceSource,
       eventCategory: qualityTelemetry?.eventCategory,
@@ -215,7 +226,7 @@ export async function compareAlbumToReference(
     albumUrl: qualityTelemetry?.albumUrl,
     imagesAnalyzed: toAnalyze.length,
     matches,
-    compareFacesCalls: facesCompared,
+    compareFacesCalls: facesCompared * referenceCount,
     msSearch: Date.now() - searchStarted,
     referenceSource: qualityTelemetry?.referenceSource,
     eventCategory: qualityTelemetry?.eventCategory,

@@ -31,6 +31,27 @@ export interface PendingDetection {
 const store = new Map<string, StoredReference>()
 const pendingStore = new Map<string, PendingDetection>()
 
+export interface ReferenceSearchInput {
+  buffer: Buffer
+  referenceId?: string
+  referenceType?: string
+}
+
+interface StoredReferenceBundle {
+  token: string
+  references: ReferenceSearchInput[]
+  primaryIndex: number
+  source: ReferenceSource
+  faceBox: FaceBox
+  confidence: number
+  qualityTier: ReferenceQualityTier
+  qualityWarning?: string
+  createdAt: number
+  expiresAt: number
+}
+
+const bundleStore = new Map<string, StoredReferenceBundle>()
+
 function purgeExpired(): void {
   const now = Date.now()
   for (const [token, entry] of store) {
@@ -39,10 +60,97 @@ function purgeExpired(): void {
   for (const [token, entry] of pendingStore) {
     if (entry.expiresAt <= now) pendingStore.delete(token)
   }
+  for (const [token, entry] of bundleStore) {
+    if (entry.expiresAt <= now) bundleStore.delete(token)
+  }
 }
 
 export function createReferenceToken(): string {
   return `rt_${randomBytes(16).toString('base64url')}`
+}
+
+export function createBundleToken(): string {
+  return `rbt_${randomBytes(16).toString('base64url')}`
+}
+
+export function saveReferenceBundle(input: {
+  references: ReferenceSearchInput[]
+  primaryIndex?: number
+  source: ReferenceSource
+  faceBox: FaceBox
+  confidence: number
+  qualityTier: ReferenceQualityTier
+  qualityWarning?: string
+}): StoredReferenceBundle {
+  purgeExpired()
+  const now = Date.now()
+  const primaryIndex = input.primaryIndex ?? 0
+  const stored: StoredReferenceBundle = {
+    token: createBundleToken(),
+    references: input.references,
+    primaryIndex,
+    source: input.source,
+    faceBox: input.faceBox,
+    confidence: input.confidence,
+    qualityTier: input.qualityTier,
+    qualityWarning: input.qualityWarning,
+    createdAt: now,
+    expiresAt: now + REFERENCE_TTL_MS,
+  }
+  bundleStore.set(stored.token, stored)
+  return stored
+}
+
+export function getReferenceBundle(token: string): StoredReferenceBundle | null {
+  purgeExpired()
+  const entry = bundleStore.get(token)
+  if (!entry) return null
+  if (entry.expiresAt <= Date.now()) {
+    bundleStore.delete(token)
+    return null
+  }
+  return entry
+}
+
+/** Resolve token to one or more search buffers (single ref or advanced bundle). */
+export function getReferencesForSearch(token: string): ReferenceSearchInput[] {
+  const bundle = getReferenceBundle(token)
+  if (bundle) return bundle.references
+
+  const single = getReference(token)
+  if (single) {
+    return [{ buffer: single.buffer }]
+  }
+
+  return []
+}
+
+/** Metadata for bundle or single reference token (for client compatibility). */
+export function getReferenceMeta(token: string): Pick<
+  StoredReference,
+  'faceBox' | 'confidence' | 'qualityTier' | 'qualityWarning' | 'source' | 'expiresAt'
+> | null {
+  const bundle = getReferenceBundle(token)
+  if (bundle) {
+    return {
+      faceBox: bundle.faceBox,
+      confidence: bundle.confidence,
+      qualityTier: bundle.qualityTier,
+      qualityWarning: bundle.qualityWarning,
+      source: bundle.source,
+      expiresAt: bundle.expiresAt,
+    }
+  }
+  const single = getReference(token)
+  if (!single) return null
+  return {
+    faceBox: single.faceBox,
+    confidence: single.confidence,
+    qualityTier: single.qualityTier,
+    qualityWarning: single.qualityWarning,
+    source: single.source,
+    expiresAt: single.expiresAt,
+  }
 }
 
 export function createDetectionToken(): string {
@@ -123,9 +231,10 @@ export function deletePendingDetection(token: string): void {
 export function clearReferenceStore(): void {
   store.clear()
   pendingStore.clear()
+  bundleStore.clear()
 }
 
-/** Future: multiple references per guided profile — see FUTURE.md */
+/** @deprecated Use saveReferenceBundle for multi-reference profiles */
 export function saveReferenceSet(_profileId: string, _references: StoredReference[]): void {
-  throw new Error('Not implemented — guided facial profile (FUTURE.md)')
+  throw new Error('Use saveReferenceBundle instead')
 }

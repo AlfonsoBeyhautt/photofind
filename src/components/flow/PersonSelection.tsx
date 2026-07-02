@@ -90,7 +90,7 @@ export function PersonSelection({ initialCategory = null, onContinue, onBack }: 
   const loadSavedProfile = useCallback(async () => {
     setProfileLoading(true)
     setValidationError(null)
-    const result = await useFacialProfile()
+    const result = await useFacialProfile({ mode: 'auto' })
     setProfileLoading(false)
     if (!result.ok) {
       setReferenceToken(null)
@@ -201,7 +201,12 @@ export function PersonSelection({ initialCategory = null, onContinue, onBack }: 
                     </div>
                     <span className="font-medium">{user.name}</span>
                     {referenceToken ? (
-                      <p className="text-xs text-emerald-400">Perfil listo para el análisis</p>
+                      <p className="text-xs text-emerald-400">
+                        Perfil listo
+                        {facialProfile.hasProfile && facialProfile.hasAdvancedProfile
+                          ? ` · ${facialProfile.referenceCount ?? 2} referencias`
+                          : ''}
+                      </p>
                     ) : (
                       <Button size="sm" variant="outline" onClick={() => void loadSavedProfile()}>
                         Cargar perfil guardado

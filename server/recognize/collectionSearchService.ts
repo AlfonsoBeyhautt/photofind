@@ -17,9 +17,9 @@ import {
   createCollection,
   describeCollection,
   indexFaces,
-  searchFacesByImage,
 } from './rekognitionClient'
-import { getReference } from './referenceStore'
+import { searchCollectionWithReferences } from './multiReferenceSearchService'
+import { getReferencesForSearch } from './referenceStore'
 import {
   countDistinctIndexedImages,
   countIndexedFaces,
@@ -31,7 +31,6 @@ import {
   hashAlbumUrl,
   isAlbumCollectionExpired,
   isAlbumCollectionStoreAvailable,
-  mapFaceIdsToImages,
   renewExpiredAlbumCollection,
   saveIndexedFaces,
   saveNoFaceMarker,
@@ -508,8 +507,8 @@ export async function searchAlbumCollection(input: {
     return fail('AWS_CREDENTIALS_MISSING')
   }
 
-  const reference = getReference(input.referenceToken)
-  if (!reference) {
+  const references = getReferencesForSearch(input.referenceToken)
+  if (references.length === 0) {
     void recordCollectionSearchOutcome({
       runId: input.qualityTelemetry?.runId,
       userId: input.qualityTelemetry?.userId,
@@ -548,9 +547,16 @@ export async function searchAlbumCollection(input: {
   }
 
   const searchStarted = Date.now()
-  let faceMatches: { faceId: string; similarity: number }[]
+  let matches: CollectionAlbumMatch[]
+  let multiRefStats: import('./multiReferenceSearchService').MultiReferenceSearchStats
   try {
-    faceMatches = await searchFacesByImage(input.collectionId, reference.buffer)
+    const searchResult = await searchCollectionWithReferences({
+      collectionId: input.collectionId,
+      albumCollectionId: input.albumCollectionId,
+      references,
+    })
+    matches = searchResult.matches
+    multiRefStats = searchResult.stats
   } catch (error) {
     console.error('[PhotoFind:Collections] search_failed', error instanceof Error ? error.message : error)
     void recordCollectionSearchOutcome({
@@ -572,30 +578,6 @@ export async function searchAlbumCollection(input: {
     return fail('AWS_REKOGNITION_ERROR')
   }
 
-  const faceIds = faceMatches
-    .map((m) => m.faceId)
-    .filter((id) => !id.startsWith('__no_face__'))
-
-  const faceIdMap = await mapFaceIdsToImages(
-    input.albumCollectionId,
-    faceIds,
-  )
-
-  const imageBest = new Map<string, number>()
-  for (const match of faceMatches) {
-    const mapped = faceIdMap.get(match.faceId)
-    if (!mapped) continue
-    const prev = imageBest.get(mapped.imageId) ?? 0
-    if (match.similarity > prev) {
-      imageBest.set(mapped.imageId, match.similarity)
-    }
-  }
-
-  const matches: CollectionAlbumMatch[] = [...imageBest.entries()].map(([imageId, similarity]) => ({
-    imageId,
-    similarity,
-  }))
-
   const indexedImages = await countDistinctIndexedImages(input.albumCollectionId)
   const indexedFaces = await countIndexedFaces(input.albumCollectionId)
   const msSearch = Date.now() - searchStarted
@@ -616,14 +598,20 @@ export async function searchAlbumCollection(input: {
     referenceSource: input.qualityTelemetry?.referenceSource,
     eventCategory: input.qualityTelemetry?.eventCategory,
     fallbackReason: input.qualityTelemetry?.fallbackReason,
+    profileMode: multiRefStats.profileMode,
+    referenceCount: multiRefStats.referenceCount,
+    multiRefExtraMatches: multiRefStats.extraMatchesFromMulti,
+    matchesByReference: multiRefStats.matchesByReference,
+    awsSearchFacesByImageCalls: multiRefStats.referenceCount,
   })
 
   console.log('[PhotoFind:Collections] search_complete', {
     collectionId: input.collectionId,
     reused: input.collectionReused,
-    searches: 1,
-    faceMatches: faceMatches.length,
+    searches: multiRefStats.referenceCount,
+    profileMode: multiRefStats.profileMode,
     imageMatches: matches.length,
+    extraFromMulti: multiRefStats.extraMatchesFromMulti,
     indexedImages,
   })
 

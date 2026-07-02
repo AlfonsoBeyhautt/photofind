@@ -38,6 +38,8 @@ La migración `009_recognition_quality_telemetry.sql` crea las tablas `recogniti
 
 La migración `010_image_fetch_telemetry.sql` agrega columnas de métricas de fetch paralelo de imágenes a `recognition_quality_runs`.
 
+La migración `011_facial_profile_references.sql` crea `facial_profile_references` (perfil multiángulo) y agrega telemetría de búsqueda multi-referencia a `recognition_quality_runs`.
+
 ## 3b. Panel de administración (`/admin`)
 
 1. Ejecutá `007_admin_users.sql`.
@@ -73,6 +75,7 @@ El nombre del usuario se guarda en `user_metadata.name` al registrarse.
 
 ```
 facial-profiles/{user_id}/profile.jpg
+facial-profiles/{user_id}/refs/{reference_id}.jpg
 ```
 
 JPEG normalizado (no la foto original). Se borra al eliminar el perfil o la cuenta (`ON DELETE CASCADE`).
